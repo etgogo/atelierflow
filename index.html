@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Prototype de gestion d’atelier mécanique">
+  <title>AtelierFlow — Gestion atelier</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#dashboard" aria-label="AtelierFlow, accueil"><span class="brand-mark">AF</span><strong>AtelierFlow</strong></a>
+      <nav class="nav" aria-label="Navigation principale">
+        <button class="nav-item active" data-view="dashboard">Tableau de bord</button>
+        <button class="nav-item" data-view="vehicles">Véhicules</button>
+        <button class="nav-item" data-view="orders">Ordres de travail</button>
+        <button class="nav-item" data-view="quotes">Devis</button>
+        <button class="nav-item" data-view="planning">Planning</button>
+      </nav>
+      <p class="sidebar-note">Prototype local · données enregistrées sur cet appareil</p>
+    </aside>
+    <main class="main-panel">
+      <header class="topbar">
+        <div><p class="eyebrow">Gestion d’atelier</p><h1 id="page-title">Tableau de bord</h1></div>
+        <button class="primary-btn" data-action="new-vehicle">+ Nouveau dossier</button>
+      </header>
+      <div id="app" aria-live="polite"></div>
+    </main>
+  </div>
+
+  <dialog id="vehicle-dialog">
+    <form id="vehicle-form" method="dialog">
+      <div class="dialog-head"><h2>Nouveau dossier véhicule</h2><button class="icon-btn" type="button" data-action="close-dialog" aria-label="Fermer">×</button></div>
+      <div class="form-grid">
+        <label>Nom du client<input name="clientName" required maxlength="100"></label>
+        <label>Téléphone<input name="phone" type="tel" required maxlength="30" placeholder="06…"></label>
+        <label>Marque<input name="brand" required maxlength="60"></label>
+        <label>Modèle<input name="model" required maxlength="60"></label>
+        <label>Immatriculation<input name="plate" required maxlength="20"></label>
+        <label>Date prévue<input name="plannedDate" type="date" required></label>
+        <label class="full">Travail demandé<textarea name="workRequested" rows="3" maxlength="1000" placeholder="Ex. vidange, bruit au freinage…"></textarea></label>
+      </div>
+      <div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button><button class="primary-btn" type="submit">Créer le dossier</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="quote-dialog">
+    <form id="quote-form" method="dialog">
+      <div class="dialog-head"><h2>Ajouter un devis complémentaire</h2><button class="icon-btn" type="button" data-action="close-dialog" aria-label="Fermer">×</button></div>
+      <input type="hidden" name="vehicleId">
+      <div class="form-grid">
+        <label class="full">Anomalie constatée<textarea name="description" rows="3" required maxlength="1000"></textarea></label>
+        <label>Montant estimé (€)<input name="amount" type="number" min="0" step="0.01" required></label>
+        <label>Décision<select name="decision"><option value="En attente">En attente client</option><option value="Accepté">Accepté</option><option value="Refusé">Refusé</option></select></label>
+      </div>
+      <div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button><button class="primary-btn" type="submit">Enregistrer le devis</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="edit-dialog">
+    <form id="edit-form" method="dialog">
+      <div class="dialog-head"><h2>Modifier le dossier</h2><button class="icon-btn" type="button" data-action="close-dialog" aria-label="Fermer">×</button></div>
+      <input type="hidden" name="vehicleId">
+      <div class="form-grid">
+        <label>Statut<select name="status"><option>À planifier</option><option>En cours</option><option>En attente client</option><option>Prêt à récupérer</option><option>Clôturé</option></select></label>
+        <label class="full">Travail effectué / notes<textarea name="workDone" rows="3" maxlength="1500"></textarea></label>
+        <label class="full">Pièces remplacées (une par ligne)<textarea name="parts" rows="3" maxlength="1000"></textarea></label>
+        <label class="full">Tâches de l’ordre de travail (une par ligne)<textarea name="tasks" rows="4" maxlength="1500"></textarea></label>
+      </div>
+      <div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button><button class="primary-btn" type="submit">Enregistrer</button></div>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
