@@ -264,9 +264,9 @@
       '</tbody></table></div>';
   }
   function render() {
-    document.querySelectorAll('.nav-item').forEach(b=>{ b.hidden = (!isAdmin() && !['dashboard','planning','settings'].includes(b.dataset.view)) || (['archives','handoffs'].includes(b.dataset.view) && !isAdmin()); });
+    document.querySelectorAll('.nav-item').forEach(b=>{ b.hidden = !isAdmin() ? b.dataset.view !== 'planning' : false; });
     $('#new-vehicle').hidden = !isAdmin();
-    if (!isAdmin() && !['dashboard','planning','settings'].includes(view)) view='planning';
+    if (!isAdmin() && view !== 'planning') view='planning';
     const titles={dashboard:t('dashboard'),vehicles:t('vehicles'),orders:t('orders'),quotes:t('quotes'),planning:t('planning'),handoffs:'Véhicules à remettre',archives:'Archives',team:t('team'),settings:t('settings')};
     $('#page-title').textContent=titles[view]||titles.dashboard;
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
@@ -625,11 +625,12 @@
   async function archiveVehicleByVehicle(vehicleId){
     if(!isAdmin())throw new Error('Seule l’administration peut archiver un véhicule.');
     const v=records.find(x=>x.id===vehicleId);if(!v?.orderId)throw new Error('Dossier introuvable.');
-    if(!confirm('Archiver définitivement ce dossier véhicule ?'))return;
+    const inspection=inspections.find(x=>x.work_order_id===v.orderId&&x.status==='submitted');
+    if(!inspection)throw new Error('Le contrôle doit être transmis par le mécanicien avant la remise.');
+    if(!confirm('Confirmer que le message client a été envoyé et que le véhicule a bien été remis ? Le dossier sera ensuite déplacé dans l’historique.'))return;
     const {error}=await client.from('work_orders').update({status:'closed'}).eq('id',v.orderId).eq('garage_id',garageId);
     if(error)throw error;
-    const inspection=inspections.find(x=>x.work_order_id===v.orderId&&x.status==='submitted');
-    if(inspection){const {error:ie}=await client.from('inspections').update({status:'archived'}).eq('id',inspection.id);if(ie)throw ie;}
+    const {error:ie}=await client.from('inspections').update({status:'archived'}).eq('id',inspection.id).eq('garage_id',garageId);if(ie)throw ie;
     await loadRecords();view='archives';render();
   }
 
@@ -642,6 +643,7 @@
     const btn=ev.target.closest('[data-action]');
     if(!btn)return;
     const id=btn.dataset.id, action=btn.dataset.action;
+    if(!isAdmin() && !['appointment','start-inspection','check-result','check-note','inspection-attachment','finish-inspection','back-orders'].includes(action)) return;
     if(action==='open'){selectedId=id;view='orders';render();}
     if(action==='edit')openForm('edit',id);
     if(action==='add-quote')openForm('quote',id);
@@ -655,16 +657,16 @@
     if(action==='add-mechanic')addMechanic(id).catch(err=>alert(errorMessage(err)));
     if(action==='appointment'){const a=appointments.find(x=>x.id===id);if(a)openAppointmentDetails(a);}
     if(action==='inspection'){const v=records.find(x=>x.id===id);if(v?.orderId)openInspection(v.orderId).catch(err=>alert(errorMessage(err)));}
-    if(action==='back-orders'){view='orders';render();}
+    if(action==='back-orders'){view=isAdmin()?'orders':'planning';render();}
     if(action==='finish-inspection')submitInspection().catch(err=>alert(errorMessage(err)));
     if(action==='start-inspection'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));}
     if(action==='review-inspection')openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));
-    if(action==='message-client'){const v=records.find(x=>x.id===id);if(v)sms(v);}
-    if(action==='archive-vehicle'){archiveVehicleByVehicle(id).catch(err=>alert(errorMessage(err)));}
+    if(action==='message-client'){if(!isAdmin())return;const v=records.find(x=>x.id===id);if(v)sms(v);}
+    if(action==='archive-vehicle'){if(!isAdmin())return;archiveVehicleByVehicle(id).catch(err=>alert(errorMessage(err)));}
   });
   document.addEventListener('change',async ev=>{
     const el=ev.target;
-    if(el.dataset.action==='status')changeStatus(el.dataset.id,el.value);
+    if(el.dataset.action==='status' && isAdmin())changeStatus(el.dataset.id,el.value);
     if(el.dataset.action==='check-result'&&el.value)inspectionSaveQueue=inspectionSaveQueue.then(()=>saveInspectionResult(el.dataset.item,{state:el.value,note:el.value==='anomaly'?(inspectionResults.find(r=>r.item_id===el.dataset.item)?.note||null):null})).then(()=>renderInspection(activeInspection.work_order_id)).catch(err=>alert(errorMessage(err)));
     if(el.dataset.action==='check-note')inspectionSaveQueue=inspectionSaveQueue.then(()=>saveInspectionResult(el.dataset.item,{note:el.value})).catch(err=>alert(errorMessage(err)));
     if(el.dataset.action==='inspection-attachment'&&el.files?.length)inspectionAttachmentQueue=inspectionAttachmentQueue.then(()=>uploadInspectionAttachments(el.dataset.item,el.files)).catch(err=>alert(errorMessage(err)));
