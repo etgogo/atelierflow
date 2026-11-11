@@ -17,7 +17,8 @@
   };
   let user = null, garageId = null, garageName = '', records = [], view = 'dashboard', selectedId = null;
   let signupMode = false;
-  let language = localStorage.getItem('atelierflow-language') || 'fr';
+  let language = 'fr';
+  localStorage.setItem('atelierflow-language','fr');
   const I18N = {
     fr:{dashboard:'Tableau de bord',vehicles:'Véhicules',orders:'Ordres de travail',quotes:'Devis',planning:'Planning atelier',team:'Équipe & administration',settings:'Paramètres',active:'Dossiers actifs',ongoing:'En cours',pending:'Devis en attente',ready:'Prêts à récupérer',activity:'Activité atelier',allVehicles:'Tous les véhicules',schedule:'Planning de l’atelier',scheduleHint:'Une ligne par membre de l’équipe · créneaux positionnés par heure',settingsTitle:'Paramètres généraux',language:'Langue de l’interface',languageHint:'Le choix est enregistré sur cet appareil.',save:'Enregistrer les préférences',saved:'Préférences enregistrées.'},
     nl:{dashboard:'Dashboard',vehicles:'Voertuigen',orders:'Werkorders',quotes:'Offertes',planning:'Werkplaatsplanning',team:'Team & beheer',settings:'Instellingen',active:'Actieve dossiers',ongoing:'In uitvoering',pending:'Openstaande offertes',ready:'Klaar om op te halen',activity:'Werkplaatsactiviteit',allVehicles:'Alle voertuigen',schedule:'Werkplaatsplanning',scheduleHint:'Eén rij per teamlid · tijdsblokken per uur',settingsTitle:'Algemene instellingen',language:'Taal van de interface',languageHint:'Deze keuze wordt op dit apparaat opgeslagen.',save:'Voorkeuren opslaan',saved:'Voorkeuren opgeslagen.'},
@@ -341,7 +342,7 @@
   }
 
   function renderSettings(){
-    $('#app').innerHTML='<section class="panel settings-panel"><div class="panel-heading"><div><h2>'+t('settingsTitle')+'</h2><p class="muted">Personnalisez votre espace AtelierFlow.</p></div></div><div class="settings-row"><div><label for="language-setting"><b>'+t('language')+'</b></label><p class="muted">'+t('languageHint')+'</p></div><select id="language-setting" class="settings-select"><option value="fr" '+(language==='fr'?'selected':'')+'>Français</option><option value="nl" '+(language==='nl'?'selected':'')+'>Nederlands</option><option value="en" '+(language==='en'?'selected':'')+'>English</option></select></div><p class="muted settings-note">Les préférences de langue sont conservées sur cet appareil et appliquées aux principales zones de navigation et au tableau de bord. La traduction complète des formulaires et de tous les libellés sera étendue progressivement.</p></section>';
+    $('#app').innerHTML='<section class="panel settings-panel"><div class="panel-heading"><div><h2>'+t('settingsTitle')+'</h2><p class="muted">Personnalisez votre espace AtelierFlow.</p></div></div><div class="settings-row"><div><label for="language-setting"><b>'+t('language')+'</b></label><p class="muted">'+t('languageHint')+'</p></div><select id="language-setting" class="settings-select" disabled><option value="fr" selected>Français</option></select></div><p class="muted settings-note">Toute l’interface AtelierFlow est réglée en français. D’autres langues pourront être ajoutées ultérieurement.</p></section>';
   }
 
   function renderTeam(){
