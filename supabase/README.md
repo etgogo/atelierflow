@@ -1,6 +1,6 @@
-# AtelierFlow Supabase database foundation
+# AtelierFlow Supabase database foundation (draft)
 
-This folder contains the first, verified-by-file migration set for the backend foundation of AtelierFlow.
+This folder contains draft database migrations for review. They have not yet been executed against PostgreSQL or validated with automated integration tests, so they are not approved for production use.
 
 ## Created files
 
@@ -27,7 +27,9 @@ These scripts create the database schema, access-control layer, and PostgreSQL b
 - The prototype currently in the repository remains untouched.
 - The SQL files are created on the dedicated branch `feature/supabase-database-foundation`.
 - These migrations are created as repository files. They are not executed here against a live Supabase database because there is no direct migration runner or project credentials in this environment.
-- The migration files are written for Supabase PostgreSQL and are intended to be applied through the Supabase SQL editor or CLI once the project is configured.
+- The migration files target Supabase PostgreSQL but still require a clean-database migration run, SQL syntax validation, RLS tests with multiple users/garages, and review of bootstrap/account-creation flows.
+- The current `index.html`/`app.js` prototype still stores its records in browser `localStorage`; it is not connected to Supabase. Publishing these migrations alone does not create a working multi-user application.
+- Do not apply these migrations to a production project until the validation steps are complete and a backup/rollback plan exists.
 
 ## Next verification step
 
