@@ -544,7 +544,8 @@
     if(action==='status')return;
     if(action==='ready'){const v=records.find(x=>x.id===id);if(v&&confirm('Préparer un SMS indiquant que le véhicule est prêt ?'))sms(v);}
     if(action==='new-appointment')openAppointmentForm();
-    if(action==='open-add-mechanic')openAddMechanicDialog();\n    if(action==='edit-mechanic')openEditMechanicDialog(id);\n    if(action==='toggle-mechanic'){const active=btn.dataset.active==='true';if(confirm(active?'Suspendre l’accès de ce mécanicien ?':'Réactiver l’accès de ce mécanicien ?'))manageMechanic(id,active?'deactivate':'activate').catch(err=>alert(errorMessage(err)));}
+    if(action==='open-add-mechanic')openAddMechanicDialog();
+    if(action==='edit-mechanic')openEditMechanicDialog(id);\n    if(action==='toggle-mechanic'){const active=btn.dataset.active==='true';if(confirm(active?'Suspendre l’accès de ce mécanicien ?':'Réactiver l’accès de ce mécanicien ?'))manageMechanic(id,active?'deactivate':'activate').catch(err=>alert(errorMessage(err)));}
     if(action==='add-mechanic')addMechanic(id).catch(err=>alert(errorMessage(err)));
     if(action==='appointment'){const a=appointments.find(x=>x.id===id);if(a)alert(a.title+' | '+timeLabel(a.starts_at)+' – '+timeLabel(a.ends_at)+' | '+(a.notes||'Aucune note'));}
     if(action==='inspection'){const v=records.find(x=>x.id===id);if(v?.orderId)openInspection(v.orderId).catch(err=>alert(errorMessage(err)));}
