@@ -147,8 +147,10 @@ LANGUAGE plpgsql
 SET search_path = pg_catalog, public
 AS $$
 BEGIN
-  IF NEW.id IS DISTINCT FROM OLD.id
-     OR NEW.is_active IS DISTINCT FROM OLD.is_active THEN
+  IF auth.uid() = OLD.id AND (
+       NEW.id IS DISTINCT FROM OLD.id
+       OR NEW.is_active IS DISTINCT FROM OLD.is_active
+     ) THEN
     RAISE EXCEPTION 'Profile identity and activation state can only be changed by an authorized administrator.';
   END IF;
   RETURN NEW;
