@@ -5,7 +5,9 @@ CREATE OR REPLACE FUNCTION public.current_profile_id()
 RETURNS UUID
 LANGUAGE sql
 STABLE
-AS $$
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $
   SELECT auth.uid();
 $$;
 
@@ -64,7 +66,7 @@ AS $$
         WHERE gm.garage_id = p_garage_id
           AND gm.profile_id = public.current_profile_id()
           AND gm.is_active = TRUE
-          AND (gm.role = 'admin' OR COALESCE(mp.allowed, TRUE) = TRUE)
+          AND (gm.role = 'admin' OR COALESCE(mp.allowed, FALSE) = TRUE)
       )
     ),
     FALSE
@@ -127,10 +129,10 @@ ON public.profiles
 FOR UPDATE
 USING (id = public.current_profile_id());
 
-CREATE POLICY "profiles_admin_insert"
+CREATE POLICY "profiles_self_insert"
 ON public.profiles
 FOR INSERT
-WITH CHECK (TRUE);
+WITH CHECK (id = auth.uid());
 
 -- garage_memberships
 CREATE POLICY "garage_memberships_read_members"
@@ -446,12 +448,5 @@ ON public.audit_logs
 FOR ALL
 USING (public.is_garage_admin(garage_id));
 
-CREATE POLICY "attachments_member_read_owner_scope"
-ON public.attachments
-FOR SELECT
-USING (public.is_garage_member(garage_id));
-
-CREATE POLICY "attachments_admin_manage"
-ON public.attachments
-FOR ALL
-USING (public.is_garage_admin(garage_id));
+-- The attachments policies are defined once above; duplicate policy names
+-- cause PostgreSQL to abort this migration.
