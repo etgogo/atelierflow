@@ -67,7 +67,7 @@
       if (signupMode) {
         const fullName = f.elements.full_name.value.trim();
         if (!fullName) throw new Error('Indiquez votre nom complet.');
-        const result = await client.auth.signUp({email, password, options:{data:{full_name:fullName}}});
+        const result = await client.auth.signUp({email, password, options:{data:{full_name:fullName}, emailRedirectTo:window.location.origin + window.location.pathname}});
         if (result.error) throw result.error;
         if (!result.data.session) {
           notice('#auth-message','Compte créé. Consultez votre boîte e-mail et confirmez votre adresse avant de vous connecter.','success');
