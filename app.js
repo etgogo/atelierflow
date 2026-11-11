@@ -1,8 +1,18 @@
 (() => {
   'use strict';
   const cfg = window.ATELIERFLOW_CONFIG;
+  const rememberPreferenceKey = 'atelierflow-remember-session';
+  let rememberSession = localStorage.getItem(rememberPreferenceKey) !== 'false';
+  const authStorage = {
+    getItem: (key) => (rememberSession ? localStorage : sessionStorage).getItem(key),
+    setItem: (key, value) => (rememberSession ? localStorage : sessionStorage).setItem(key, value),
+    removeItem: (key) => {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    }
+  };
   const client = window.supabase.createClient(cfg.url, cfg.anonKey, {
-    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true, storage: authStorage }
   });
   const $ = (s) => document.querySelector(s);
   const STATUS = {
@@ -81,12 +91,15 @@
     $('#auth-submit').textContent = signupMode ? 'Créer mon compte' : 'Se connecter';
     $('#toggle-signup').textContent = signupMode ? 'J’ai déjà un compte' : 'Créer un compte';
     $('#auth-form').elements.password.autocomplete = signupMode ? 'new-password' : 'current-password';
+    $('#remember-field').hidden = signupMode;
     $('#auth-message').hidden = true;
   });
 
   $('#auth-form').addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const f = ev.currentTarget, email = f.elements.email.value.trim(), password = f.elements.password.value;
+    rememberSession = signupMode ? true : f.elements.remember_session.checked;
+    localStorage.setItem(rememberPreferenceKey, rememberSession ? 'true' : 'false');
     const btn = $('#auth-submit');
     btn.disabled = true; btn.textContent = 'Veuillez patienter…';
     try {
