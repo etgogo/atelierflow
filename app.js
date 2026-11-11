@@ -345,7 +345,23 @@
   }
 
   function renderTeam(){
-    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Équipe de l’atelier</h2><p class="muted">Comptes rattachés à cet atelier et profils du planning.</p></div></div><div class="team-list">'+staff.map(s=>'<article class="team-row"><div><b>'+esc(s.profile.full_name||'Compte sans nom')+'</b><small>'+(s.role==='admin'?'Administrateur':'Mécanicien')+(s.profile.is_active===false?' · Inactif':'')+'</small></div><div>'+(s.mechanic?'<span class="badge green">Dans le planning</span>':(isAdmin()?'<button class="secondary-btn" data-action="add-mechanic" data-id="'+esc(s.profileId)+'">Ajouter au planning</button>':'<span class="muted">Non configuré</span>'))+'</div></article>').join('')+'</div>'+(isAdmin()?'<p class="muted team-help">Pour ajouter un nouveau garagiste, son compte doit d’abord être créé et rattaché à ce garage. L’invitation sécurisée par e-mail sera ajoutée dans une étape dédiée.</p>':'')+'</section>';
+    const candidates=staff.filter(s=>!s.mechanic);
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Équipe de l’atelier</h2><p class="muted">Ajoutez un compte existant en un seul clic.</p></div>'+(isAdmin()?'<button class="primary-btn" data-action="open-add-mechanic">+ Ajouter un mécanicien</button>':'')+'</div><div class="team-list">'+(staff.length?staff.map(s=>'<article class="team-row"><div><b>'+esc(s.profile.full_name||'Compte sans nom')+'</b><small>'+(s.role==='admin'?'Administrateur':'Membre de l’atelier')+(s.profile.is_active===false?' · Inactif':'')+'</small></div><div>'+(s.mechanic?'<span class="badge green">Mécanicien créé</span>':(isAdmin()?'<span class="muted">Pas encore mécanicien</span>':'<span class="muted">Non configuré</span>'))+'</div></article>').join(''):'<p class="empty">Aucun membre n’est encore rattaché à cet atelier.</p>')+'</div>'+(isAdmin()?'<p class="muted team-help">Le compte du mécanicien doit déjà avoir rejoint cet atelier. Sélectionnez-le ensuite pour lui créer son profil et l’ajouter au planning.</p>':'')+'</section>';
+  }
+  function openAddMechanicDialog(){
+    if(!isAdmin())return;
+    const candidates=staff.filter(s=>!s.mechanic);
+    if(!candidates.length){alert('Tous les membres actuels ont déjà un profil mécanicien. Pour ajouter une nouvelle personne, elle doit d’abord créer son compte et rejoindre cet atelier.');return;}
+    const options=candidates.map(s=>'<option value="'+esc(s.profileId)+'">'+esc(s.profile.full_name||'Compte sans nom')+' · '+esc(s.role==='admin'?'Administrateur':'Membre')+'</option>').join('');
+    showAppointmentDialog('<h2>Ajouter un mécanicien</h2><p class="muted">Choisissez une personne déjà membre de votre atelier. Son profil sera ajouté au planning.</p><div class="form-grid"><label class="full">Membre à ajouter<select name="mechanic_profile_id" required>'+options+'</select></label></div>');
+    const form=$('#data-form');
+    form.querySelector('[type=submit]').textContent='Créer le profil mécanicien';
+    form.removeEventListener('submit',()=>{});
+    form.addEventListener('submit',async ev=>{
+      ev.preventDefault();const btn=form.querySelector('[type=submit]');btn.disabled=true;
+      try{await addMechanic(form.elements.mechanic_profile_id.value);const dlg=$('#data-dialog');if(dlg){dlg.close();dlg.remove();}}
+      catch(err){alert('Impossible de créer le profil : '+errorMessage(err));btn.disabled=false;}
+    },{once:true});
   }
   async function addMechanic(profileId){
     if(!isAdmin())throw new Error('Réservé à l’administrateur.');
@@ -470,6 +486,7 @@
     if(action==='status')return;
     if(action==='ready'){const v=records.find(x=>x.id===id);if(v&&confirm('Préparer un SMS indiquant que le véhicule est prêt ?'))sms(v);}
     if(action==='new-appointment')openAppointmentForm();
+    if(action==='open-add-mechanic')openAddMechanicDialog();
     if(action==='add-mechanic')addMechanic(id).catch(err=>alert(errorMessage(err)));
     if(action==='appointment'){const a=appointments.find(x=>x.id===id);if(a)alert(a.title+' | '+timeLabel(a.starts_at)+' – '+timeLabel(a.ends_at)+' | '+(a.notes||'Aucune note'));}
     if(action==='inspection'){const v=records.find(x=>x.id===id);if(v?.orderId)openInspection(v.orderId).catch(err=>alert(errorMessage(err)));}
