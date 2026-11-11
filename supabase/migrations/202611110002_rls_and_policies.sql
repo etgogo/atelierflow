@@ -139,6 +139,28 @@ ON public.profiles
 FOR UPDATE
 USING (id = public.current_profile_id());
 
+-- A profile may edit its contact details, but cannot reactivate/deactivate itself
+-- or change its identity through the self-service update policy.
+CREATE OR REPLACE FUNCTION public.prevent_profile_security_field_changes()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $
+BEGIN
+  IF NEW.id IS DISTINCT FROM OLD.id
+     OR NEW.is_active IS DISTINCT FROM OLD.is_active THEN
+    RAISE EXCEPTION 'Profile identity and activation state can only be changed by an authorized administrator.';
+  END IF;
+  RETURN NEW;
+END;
+$;
+
+DROP TRIGGER IF EXISTS profiles_protect_security_fields ON public.profiles;
+CREATE TRIGGER profiles_protect_security_fields
+BEFORE UPDATE ON public.profiles
+FOR EACH ROW
+EXECUTE FUNCTION public.prevent_profile_security_field_changes();
+
 CREATE POLICY "profiles_self_insert"
 ON public.profiles
 FOR INSERT
