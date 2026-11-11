@@ -152,6 +152,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
 TO authenticated;
 
 GRANT SELECT ON TABLE public.audit_logs TO authenticated;
+REVOKE ALL ON TABLE public.v_vehicle_key_status FROM PUBLIC, anon;
 GRANT SELECT ON TABLE public.v_vehicle_key_status TO authenticated;
 
 GRANT EXECUTE ON FUNCTION public.current_profile_id() TO authenticated;
