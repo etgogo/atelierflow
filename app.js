@@ -89,9 +89,11 @@
   $('#toggle-signup').addEventListener('click', () => {
     signupMode = !signupMode;
     $('#name-field').hidden = !signupMode;
-    $('#auth-submit').textContent = signupMode ? 'Créer mon compte' : 'Se connecter';
-    $('#toggle-signup').textContent = signupMode ? 'J’ai déjà un compte' : 'Créer un compte';
-    $('#auth-form').elements.password.autocomplete = signupMode ? 'new-password' : 'current-password';
+    $('#password-field').hidden = signupMode;
+    $('#auth-form').elements.password.required = !signupMode;
+    $('#auth-submit').textContent = signupMode ? 'Envoyer ma demande' : 'Se connecter';
+    $('#toggle-signup').textContent = signupMode ? 'J’ai déjà un compte' : 'Demander un accès';
+    $('#auth-form').elements.password.autocomplete = 'current-password';
     $('#remember-field').hidden = signupMode;
     $('#auth-message').hidden = true;
   });
@@ -107,14 +109,13 @@
       if (signupMode) {
         const fullName = f.elements.full_name.value.trim();
         if (!fullName) throw new Error('Indiquez votre nom complet.');
-        const result = await client.auth.signUp({email, password, options:{data:{full_name:fullName}, emailRedirectTo:window.location.origin + window.location.pathname}});
-        if (result.error) throw result.error;
-        if (!result.data.session) {
-          notice('#auth-message','Compte créé. Consultez votre boîte e-mail et confirmez votre adresse avant de vous connecter.','success');
-        } else {
-          user = result.data.user;
-          await continueAfterAuth();
-        }
+        const { data, error } = await client.functions.invoke('access-requests', {
+          body: { action: 'submit', fullName, email }
+        });
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+        notice('#auth-message', data?.message || 'Votre demande a été envoyée à l’administration.', 'success');
+        f.reset();
       } else {
         const result = await client.auth.signInWithPassword({email,password});
         if (result.error) throw result.error;
