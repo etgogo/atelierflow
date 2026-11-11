@@ -177,3 +177,130 @@ DROP TRIGGER IF EXISTS reports_work_order_garage_guard ON public.reports;
 CREATE TRIGGER reports_work_order_garage_guard
 BEFORE INSERT OR UPDATE OF garage_id, work_order_id ON public.reports
 FOR EACH ROW EXECUTE FUNCTION public.enforce_same_garage_reference('public.work_orders', 'work_order_id');
+
+
+-- Tenant ownership is immutable. Moving an existing row between garages would
+-- invalidate its dependent records and could expose data across tenant boundaries.
+CREATE OR REPLACE FUNCTION public.prevent_garage_id_change()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $$
+BEGIN
+  IF NEW.garage_id IS DISTINCT FROM OLD.garage_id THEN
+    RAISE EXCEPTION 'A record cannot be moved between garages.'
+      USING ERRCODE = 'check_violation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS garage_memberships_garage_id_immutable ON public.garage_memberships;
+CREATE TRIGGER garage_memberships_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.garage_memberships
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS permission_definitions_garage_id_immutable ON public.permission_definitions;
+CREATE TRIGGER permission_definitions_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.permission_definitions
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS mechanic_profiles_garage_id_immutable ON public.mechanic_profiles;
+CREATE TRIGGER mechanic_profiles_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.mechanic_profiles
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS clients_garage_id_immutable ON public.clients;
+CREATE TRIGGER clients_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.clients
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS vehicles_garage_id_immutable ON public.vehicles;
+CREATE TRIGGER vehicles_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.vehicles
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS work_orders_garage_id_immutable ON public.work_orders;
+CREATE TRIGGER work_orders_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.work_orders
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS appointments_garage_id_immutable ON public.appointments;
+CREATE TRIGGER appointments_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.appointments
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS appointment_mechanics_garage_id_immutable ON public.appointment_mechanics;
+CREATE TRIGGER appointment_mechanics_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.appointment_mechanics
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS mileage_readings_garage_id_immutable ON public.mileage_readings;
+CREATE TRIGGER mileage_readings_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.mileage_readings
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS key_custody_events_garage_id_immutable ON public.key_custody_events;
+CREATE TRIGGER key_custody_events_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.key_custody_events
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS checklist_templates_garage_id_immutable ON public.checklist_templates;
+CREATE TRIGGER checklist_templates_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.checklist_templates
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS checklist_categories_garage_id_immutable ON public.checklist_categories;
+CREATE TRIGGER checklist_categories_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.checklist_categories
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS checklist_items_garage_id_immutable ON public.checklist_items;
+CREATE TRIGGER checklist_items_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.checklist_items
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS inspections_garage_id_immutable ON public.inspections;
+CREATE TRIGGER inspections_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.inspections
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS inspection_results_garage_id_immutable ON public.inspection_results;
+CREATE TRIGGER inspection_results_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.inspection_results
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS anomalies_garage_id_immutable ON public.anomalies;
+CREATE TRIGGER anomalies_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.anomalies
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS attachments_garage_id_immutable ON public.attachments;
+CREATE TRIGGER attachments_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.attachments
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS parts_garage_id_immutable ON public.parts;
+CREATE TRIGGER parts_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.parts
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS work_order_parts_garage_id_immutable ON public.work_order_parts;
+CREATE TRIGGER work_order_parts_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.work_order_parts
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS quotes_garage_id_immutable ON public.quotes;
+CREATE TRIGGER quotes_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.quotes
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS reports_garage_id_immutable ON public.reports;
+CREATE TRIGGER reports_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.reports
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
+
+DROP TRIGGER IF EXISTS audit_logs_garage_id_immutable ON public.audit_logs;
+CREATE TRIGGER audit_logs_garage_id_immutable
+BEFORE UPDATE OF garage_id ON public.audit_logs
+FOR EACH ROW EXECUTE FUNCTION public.prevent_garage_id_change();
