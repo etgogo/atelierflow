@@ -17,7 +17,7 @@
   };
   let user = null, garageId = null, garageName = '', records = [], view = 'dashboard', selectedId = null;
   let signupMode = false;
-  let membershipRole='mechanic', staff=[], appointments=[], appointmentAssignments=[], mechanicProfiles=[];
+  let membershipRole='mechanic', staff=[], appointments=[], appointmentAssignments=[], mechanicProfiles=[], checklistTemplate=null, checklistCategories=[], checklistItems=[], activeInspection=null, inspectionResults=[];
 
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function money(v) { return new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(Number(v)||0); }
@@ -218,7 +218,7 @@
     return '<div class="panel-heading"><div><h2>'+esc(v.brand)+' '+esc(v.model)+'</h2><p class="muted">'+esc(v.clientName)+' · '+esc(v.plate)+'</p></div><button class="secondary-btn" data-action="edit" data-id="'+esc(v.id)+'">Modifier</button></div>'+
       '<div class="detail-block"><b>Travail demandé</b><p>'+esc(v.workRequested||'—')+'</p></div><div class="detail-block"><b>Travail effectué / notes</b><p>'+esc(v.workDone||'À renseigner')+'</p></div>'+
       '<div class="detail-block"><label class="inline-label">Statut <select data-action="status" data-id="'+esc(v.id)+'">'+statusOptions.map(s=>'<option '+(v.status===s?'selected':'')+'>'+s+'</option>').join('')+'</select></label></div>'+
-      '<div class="button-row"><button class="secondary-btn" data-action="edit" data-id="'+esc(v.id)+'">Mettre à jour l’ordre</button><button class="primary-btn" data-action="add-quote" data-id="'+esc(v.id)+'">Ajouter un devis</button><button class="primary-btn" data-action="ready" data-id="'+esc(v.id)+'">Préparer SMS</button></div>';
+      '<div class="button-row"><button class="secondary-btn" data-action="edit" data-id="'+esc(v.id)+'">Mettre à jour l’ordre</button><button class="primary-btn" data-action="add-quote" data-id="'+esc(v.id)+'">Ajouter un devis</button><button class="secondary-btn" data-action="inspection" data-id="'+esc(v.id)+'">Contrôle véhicule</button><button class="primary-btn" data-action="ready" data-id="'+esc(v.id)+'">Préparer SMS</button></div>';
   }
 
   function openForm(kind,id) {
@@ -366,6 +366,77 @@
   }
   document.addEventListener('change',ev=>{if(ev.target.id==='planning-day')renderWorkshopPlanning();});
 
+
+  const DEFAULT_CHECKLIST=[
+    {name:'Sécurité et freinage',items:['Freinage avant','Freinage arrière','État des pneus','Pression des pneus','Éclairage et signalisation','Direction et jeu de direction']},
+    {name:'Moteur et transmission',items:['Démarrage et fonctionnement moteur','Bruits anormaux','Embrayage et boîte de vitesses','Courroie / chaîne / transmission']},
+    {name:'Sous le véhicule',items:['Fuites moteur','Fuites boîte de vitesses','Échappement et fixations','Suspension et amortisseurs']},
+    {name:'Électricité et diagnostic',items:['Batterie et charge','Voyants au tableau de bord','Lecture des codes défauts','Équipements électriques']},
+    {name:'Habitacle et finition',items:['Ceintures et avertisseurs','Essuie-glaces et lave-glace','État général intérieur / extérieur']}
+  ];
+  async function ensureChecklist(){
+    if(checklistTemplate)return;
+    const {data:templates,error}=await client.from('checklist_templates').select('*').eq('garage_id',garageId).eq('is_active',true).order('created_at');
+    if(error)throw error;
+    if(templates?.length)checklistTemplate=templates[0];
+    else{
+      if(!isAdmin())throw new Error('Le modèle de contrôle doit être créé par l’administrateur.');
+      const {data:t,error:te}=await client.from('checklist_templates').insert({garage_id:garageId,name:'Contrôle général du véhicule',created_by:user.id}).select().single();
+      if(te)throw te;checklistTemplate=t;
+      for(let i=0;i<DEFAULT_CHECKLIST.length;i++){
+        const group=DEFAULT_CHECKLIST[i];
+        const {data:c,error:ce}=await client.from('checklist_categories').insert({garage_id:garageId,template_id:t.id,name:group.name,sort_order:i}).select().single();
+        if(ce)throw ce;
+        const payload=group.items.map((name,j)=>({garage_id:garageId,category_id:c.id,name,sort_order:j,item_type:'boolean'}));
+        const {error:ie}=await client.from('checklist_items').insert(payload);if(ie)throw ie;
+      }
+    }
+    const {data:cats,error:ca}=await client.from('checklist_categories').select('*').eq('template_id',checklistTemplate.id).order('sort_order');
+    if(ca)throw ca;checklistCategories=cats||[];
+    const {data:items,error:it}=await client.from('checklist_items').select('*').eq('garage_id',garageId).eq('is_active',true).order('sort_order');
+    if(it)throw it;checklistItems=items||[];
+  }
+  async function openInspection(workOrderId){
+    await ensureChecklist();
+    const {data:ins,error}=await client.from('inspections').select('*').eq('work_order_id',workOrderId).eq('template_id',checklistTemplate.id).order('created_at',{ascending:false}).limit(1);
+    if(error)throw error;activeInspection=ins?.[0]||null;
+    if(!activeInspection){
+      if(!isAdmin())throw new Error('L’administrateur doit démarrer ce contrôle.');
+      const {data:i,error:ie}=await client.from('inspections').insert({garage_id:garageId,work_order_id:workOrderId,template_id:checklistTemplate.id,conducted_by:user.id,status:'in_progress'}).select().single();
+      if(ie)throw ie;activeInspection=i;
+    }
+    const {data:r,error:re}=await client.from('inspection_results').select('*').eq('inspection_id',activeInspection.id);
+    if(re)throw re;inspectionResults=r||[];renderInspection(workOrderId);
+  }
+  function renderInspection(workOrderId){
+    const v=records.find(x=>x.orderId===workOrderId);
+    const sections=checklistCategories.map(cat=>{
+      const items=checklistItems.filter(i=>i.category_id===cat.id);
+      return '<section class="check-group"><h3>'+esc(cat.name)+'</h3>'+items.map(item=>{
+        const result=inspectionResults.find(r=>r.item_id===item.id),state=result?.state||'ok';
+        return '<div class="check-row"><b>'+esc(item.name)+'</b><select data-action="check-result" data-item="'+esc(item.id)+'" '+(!isAdmin()?'disabled':'')+'><option value="ok" '+(state==='ok'?'selected':'')+'>Conforme</option><option value="anomaly" '+(state==='anomaly'?'selected':'')+'>Anomalie</option><option value="n/a" '+(state==='n/a'?'selected':'')+'>Non applicable</option></select><input class="check-note" data-action="check-note" data-item="'+esc(item.id)+'" placeholder="Observation" value="'+esc(result?.note||'')+'" '+(!isAdmin()?'disabled':'')+'></div>';
+      }).join('')+'</section>';
+    }).join('');
+    $('#page-title').textContent='Contrôle véhicule';
+    const done=inspectionResults.filter(r=>r.state==='ok'||r.state==='anomaly'||r.state==='n/a').length;
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour aux ordres</button></div><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés</div>'+sections+'<div class="button-row">'+(isAdmin()?'<button class="primary-btn" data-action="finish-inspection">Terminer le contrôle</button>':'<span class="muted">Consultation en lecture seule pour ce compte.</span>')+'</div></section>';
+  }
+  async function saveInspectionResult(itemId,patch){
+    if(!isAdmin())throw new Error('Les droits actuels autorisent uniquement l’administrateur à modifier les contrôles.');
+    const current=inspectionResults.find(r=>r.item_id===itemId);
+    const payload={garage_id:garageId,inspection_id:activeInspection.id,item_id:itemId,...(current?{}:{state:'ok'}),...patch};
+    const {data,error}=await client.from('inspection_results').upsert(payload,{onConflict:'inspection_id,item_id'}).select().single();
+    if(error)throw error;
+    const idx=inspectionResults.findIndex(r=>r.item_id===itemId);if(idx>=0)inspectionResults[idx]=data;else inspectionResults.push(data);
+  }
+  async function finishInspection(){
+    if(!isAdmin())return;
+    const missing=checklistItems.filter(i=>!inspectionResults.some(r=>r.item_id===i.id));
+    if(missing.length){alert('Il reste '+missing.length+' contrôle(s) sans résultat.');return;}
+    const {error}=await client.from('inspections').update({status:'completed'}).eq('id',activeInspection.id);
+    if(error)throw error;alert('Contrôle terminé et enregistré.');
+  }
+
   /* WORKSHOP_PLANNING_MODULE */
   document.addEventListener('click',async ev=>{
     const nav=ev.target.closest('[data-view]');
@@ -384,10 +455,15 @@
     if(action==='new-appointment')openAppointmentForm();
     if(action==='add-mechanic')addMechanic(id).catch(err=>alert(errorMessage(err)));
     if(action==='appointment'){const a=appointments.find(x=>x.id===id);if(a)alert(a.title+' | '+timeLabel(a.starts_at)+' – '+timeLabel(a.ends_at)+' | '+(a.notes||'Aucune note'));}
+    if(action==='inspection'){const v=records.find(x=>x.id===id);if(v?.orderId)openInspection(v.orderId).catch(err=>alert(errorMessage(err)));}
+    if(action==='back-orders'){view='orders';render();}
+    if(action==='finish-inspection')finishInspection().catch(err=>alert(errorMessage(err)));
   });
   document.addEventListener('change',async ev=>{
     const el=ev.target;
     if(el.dataset.action==='status')changeStatus(el.dataset.id,el.value);
+    if(el.dataset.action==='check-result')saveInspectionResult(el.dataset.item,{state:el.value}).then(()=>renderInspection(activeInspection.work_order_id)).catch(err=>alert(errorMessage(err)));
+    if(el.dataset.action==='check-note')saveInspectionResult(el.dataset.item,{note:el.value}).catch(err=>alert(errorMessage(err)));
     if(el.dataset.action==='quote-status'){
       const {error}=await client.from('quotes').update({status:el.value}).eq('id',el.dataset.id).eq('garage_id',garageId);
       if(error)alert('Décision du devis non enregistrée : '+errorMessage(error));
