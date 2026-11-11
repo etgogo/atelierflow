@@ -319,7 +319,7 @@
       const events=todays.filter(a=>appointmentAssignments.some(x=>x.appointment_id===a.id&&x.mechanic_profile_id===person.mechanic.id)).map(a=>{
         const s=new Date(a.starts_at),e=new Date(a.ends_at),left=Math.max(0,(s-start)/3600000),right=Math.min(12,(e-start)/3600000);
         if(right<=left)return '';
-        const colStart=Math.floor(left)+2,colEnd=Math.max(colStart+1,Math.ceil(right)+2);
+        const colStart=Math.floor(left)+1,colEnd=Math.max(colStart+1,Math.ceil(right)+1);
         const linked=records.find(v=>v.orderId===a.work_order_id);
         return '<button class="schedule-event" style="grid-column:'+colStart+' / '+colEnd+'" data-action="appointment" data-id="'+esc(a.id)+'"><b>'+timeLabel(a.starts_at)+'–'+timeLabel(a.ends_at)+'</b><span>'+esc(a.title)+'</span><small>'+esc(linked?(linked.brand+' '+linked.model+' · '+linked.plate):'Intervention atelier')+'</small></button>';
       }).join('');
@@ -413,7 +413,7 @@
     const sections=checklistCategories.map(cat=>{
       const items=checklistItems.filter(i=>i.category_id===cat.id);
       return '<section class="check-group"><h3>'+esc(cat.name)+'</h3>'+items.map(item=>{
-        const result=inspectionResults.find(r=>r.item_id===item.id),state=result?.state||'ok';
+        const result=inspectionResults.find(r=>r.item_id===item.id),state=result?.state||'';
         return '<div class="check-row"><b>'+esc(item.name)+'</b><select data-action="check-result" data-item="'+esc(item.id)+'" '+(!isAdmin()?'disabled':'')+'><option value="ok" '+(state==='ok'?'selected':'')+'>Conforme</option><option value="anomaly" '+(state==='anomaly'?'selected':'')+'>Anomalie</option><option value="n/a" '+(state==='n/a'?'selected':'')+'>Non applicable</option></select><input class="check-note" data-action="check-note" data-item="'+esc(item.id)+'" placeholder="Observation" value="'+esc(result?.note||'')+'" '+(!isAdmin()?'disabled':'')+'></div>';
       }).join('')+'</section>';
     }).join('');
