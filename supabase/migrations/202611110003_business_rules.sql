@@ -1,31 +1,112 @@
 -- Migration 03: PostgreSQL business rules for planning conflicts, mileage integrity and history
 
+-- Serialize scheduling changes by mechanic using transaction-scoped advisory locks.
+-- The lock key depends only on mechanic_profile_id: different mechanics never block
+-- each other's appointments, even when their time ranges are identical.
 CREATE OR REPLACE FUNCTION public.check_mechanic_appointment_overlap()
 RETURNS TRIGGER AS $$
+DECLARE
+  v_garage_id UUID;
+  v_starts_at TIMESTAMPTZ;
+  v_ends_at TIMESTAMPTZ;
 BEGIN
+  -- Lock/read the parent appointment first. This also ensures this trigger sees
+  -- the committed time window if a concurrent appointment update just completed.
+  SELECT a.garage_id, a.starts_at, a.ends_at
+    INTO v_garage_id, v_starts_at, v_ends_at
+  FROM public.appointments AS a
+  WHERE a.id = NEW.appointment_id
+  FOR SHARE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Appointment % does not exist', NEW.appointment_id
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+
+  -- Same-mechanic writes serialize; unrelated mechanics use different locks.
+  PERFORM pg_advisory_xact_lock(
+    hashtextextended(NEW.mechanic_profile_id::TEXT, 0)
+  );
+
+  -- Half-open intervals permit back-to-back appointments (10:00 end, 10:00 start).
+  -- Exclude this appointment so INSERT and UPDATE both work using NEW values.
   IF EXISTS (
     SELECT 1
-    FROM public.appointment_mechanics new_am
-    JOIN public.appointments new_a ON new_a.id = new_am.appointment_id
-    JOIN public.appointment_mechanics existing_am ON existing_am.mechanic_profile_id = new_am.mechanic_profile_id
-    JOIN public.appointments existing_a ON existing_a.id = existing_am.appointment_id
-    WHERE new_am.id = NEW.id
-      AND existing_am.id <> NEW.id
-      AND existing_a.garage_id = new_a.garage_id
-      AND existing_a.starts_at < new_a.ends_at
-      AND existing_a.ends_at > new_a.starts_at
+    FROM public.appointment_mechanics AS assigned
+    JOIN public.appointments AS other_appointment
+      ON other_appointment.id = assigned.appointment_id
+    WHERE assigned.mechanic_profile_id = NEW.mechanic_profile_id
+      AND assigned.appointment_id <> NEW.appointment_id
+      AND other_appointment.starts_at < v_ends_at
+      AND other_appointment.ends_at > v_starts_at
   ) THEN
-    RAISE EXCEPTION 'Overlapping appointment detected for the same mechanic in the same garage.';
+    RAISE EXCEPTION
+      'Planning conflict: mechanic % already has an overlapping appointment',
+      NEW.mechanic_profile_id
+      USING ERRCODE = 'exclusion_violation';
+  END IF;
+
+  -- Keep the denormalized garage field consistent with its parent appointment.
+  NEW.garage_id := v_garage_id;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS appointment_mechanics_overlap_guard
+  ON public.appointment_mechanics;
+CREATE TRIGGER appointment_mechanics_overlap_guard
+BEFORE INSERT OR UPDATE OF appointment_id, mechanic_profile_id
+ON public.appointment_mechanics
+FOR EACH ROW
+EXECUTE FUNCTION public.check_mechanic_appointment_overlap();
+
+-- Changing appointment times must run the same check for every assigned mechanic.
+-- Locks are acquired in a stable order so multi-mechanic appointments avoid
+-- deadlocks with other updates affecting the same set of mechanics.
+CREATE OR REPLACE FUNCTION public.check_appointment_time_overlap()
+RETURNS TRIGGER AS $$
+DECLARE
+  v_mechanic_id UUID;
+BEGIN
+  FOR v_mechanic_id IN
+    SELECT DISTINCT am.mechanic_profile_id
+    FROM public.appointment_mechanics AS am
+    WHERE am.appointment_id = NEW.id
+    ORDER BY am.mechanic_profile_id
+  LOOP
+    PERFORM pg_advisory_xact_lock(
+      hashtextextended(v_mechanic_id::TEXT, 0)
+    );
+  END LOOP;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.appointment_mechanics AS assigned
+    JOIN public.appointment_mechanics AS other_assigned
+      ON other_assigned.mechanic_profile_id = assigned.mechanic_profile_id
+    JOIN public.appointments AS other_appointment
+      ON other_appointment.id = other_assigned.appointment_id
+    WHERE assigned.appointment_id = NEW.id
+      AND other_assigned.appointment_id <> NEW.id
+      AND other_appointment.starts_at < NEW.ends_at
+      AND other_appointment.ends_at > NEW.starts_at
+  ) THEN
+    RAISE EXCEPTION
+      'Planning conflict: changing appointment % would overlap another appointment for an assigned mechanic',
+      NEW.id
+      USING ERRCODE = 'exclusion_violation';
   END IF;
 
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
-CREATE TRIGGER appointment_mechanics_overlap_guard
-BEFORE INSERT OR UPDATE ON public.appointment_mechanics
+DROP TRIGGER IF EXISTS appointments_time_overlap_guard ON public.appointments;
+CREATE TRIGGER appointments_time_overlap_guard
+BEFORE UPDATE OF starts_at, ends_at
+ON public.appointments
 FOR EACH ROW
-EXECUTE FUNCTION public.check_mechanic_appointment_overlap();
+EXECUTE FUNCTION public.check_appointment_time_overlap();
 
 CREATE OR REPLACE FUNCTION public.check_mileage_consistency()
 RETURNS TRIGGER AS $$
