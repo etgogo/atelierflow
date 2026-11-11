@@ -40,6 +40,16 @@
         <button class="secondary-btn" type="button" id="toggle-signup">Créer un compte</button>
       </div>
     </form>
+    <section id="password-setup-panel" hidden>
+      <h2>Choisir votre mot de passe</h2>
+      <p class="muted">Votre compte mécanicien a été créé par l’administrateur de l’atelier. Choisissez un mot de passe personnel pour activer votre accès.</p>
+      <div id="password-setup-message" class="notice" hidden></div>
+      <form id="password-setup-form">
+        <label>Nouveau mot de passe<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label>Confirmer le mot de passe<input name="confirm_password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <div class="auth-actions"><button class="primary-btn" type="submit">Enregistrer mon mot de passe</button></div>
+      </form>
+    </section>
     <p class="muted" style="font-size:12px;margin-top:18px">Les comptes sont personnels. Les données de chaque garage sont isolées.</p>
   </section>
 
