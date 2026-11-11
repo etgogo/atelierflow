@@ -152,6 +152,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE
 TO authenticated;
 
 GRANT SELECT ON TABLE public.audit_logs TO authenticated;
+GRANT SELECT ON TABLE public.v_vehicle_key_status TO authenticated;
 
 GRANT EXECUTE ON FUNCTION public.current_profile_id() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.current_garage_ids() TO authenticated;
