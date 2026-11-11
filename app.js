@@ -181,7 +181,7 @@
         client.from('appointments').select('*').eq('garage_id',garageId).order('starts_at'),
         client.from('appointment_mechanics').select('*').eq('garage_id',garageId),
         client.from('mechanic_profiles').select('*').eq('garage_id',garageId),
-        client.from('garage_memberships').select('id,profile_id,role,is_active').eq('garage_id',garageId).eq('is_active',true),
+        client.from('garage_memberships').select('id,profile_id,role,is_active').eq('garage_id',garageId),
         client.from('profiles').select('id,full_name,is_active')
       ]);
       for (const r of results) if (r.error) throw r.error;
@@ -383,7 +383,24 @@
   }
 
   function renderTeam(){
-    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Équipe de l’atelier</h2><p class="muted">Gérez les accès et les profils des mécaniciens.</p></div>'+(isAdmin()?'<button class="primary-btn" data-action="open-add-mechanic">+ Créer un compte mécanicien</button>':'')+'</div><div class="team-list">'+(staff.length?staff.map(s=>'<article class="team-row"><div><b>'+esc(s.profile.full_name||'Compte sans nom')+'</b><small>'+(s.role==='admin'?'Administrateur':'Mécanicien')+(s.profile.is_active===false?' · Inactif':'')+'</small></div><div>'+(s.mechanic?'<span class="badge green">Mécanicien actif</span>':'<span class="muted">Profil non configuré</span>')+'</div></article>').join(''):'<p class="empty">Aucun membre n’est encore rattaché à cet atelier.</p>')+'</div>'+(isAdmin()?'<p class="muted team-help">Créez le compte ici : le mécanicien recevra un e-mail pour définir son mot de passe. Son accès sera automatiquement rattaché à cet atelier.</p>':'')+'</section>';
+    const members=staff.filter(s=>s.role==='admin'||s.mechanic);
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Équipe de l’atelier</h2><p class="muted">Gérez les membres et leurs accès au planning.</p></div>'+(isAdmin()?'<button class="primary-btn" data-action="open-add-mechanic">+ Ajouter un mécanicien</button>':'')+'</div><div class="team-list">'+(members.length?members.map(s=>{
+      const active=s.is_active!==false;
+      return '<article class="team-row"><div><b>'+esc(s.profile.full_name||'Compte sans nom')+'</b><small>'+(s.role==='admin'?'Administrateur':'Mécanicien')+' · '+(active?'Accès actif':'Accès suspendu')+'</small></div><div class="team-actions">'+(s.role==='admin'?'<span class="badge">Administrateur</span>':(active?'<span class="badge green">Actif</span>':'<span class="badge">Suspendu</span>'))+(isAdmin()&&s.role==='mechanic'?'<button class="secondary-btn" data-action="edit-mechanic" data-id="'+esc(s.profileId)+'">Modifier</button><button class="secondary-btn" data-action="toggle-mechanic" data-id="'+esc(s.profileId)+'" data-active="'+(active?'true':'false')+'">'+(active?'Désactiver':'Réactiver')+'</button>':'')+'</div></article>';
+    }).join(''):'<p class="empty">Aucun membre n’est encore rattaché à cet atelier.</p>')+'</div>'+(isAdmin()?'<p class="muted team-help">Vous pouvez modifier le nom d’un mécanicien ou suspendre/réactiver son accès. Un accès suspendu ne peut plus consulter l’atelier.</p>':'')+'</section>';
+  }
+  async function manageMechanic(profileId,action,fullName){
+    const {data,error}=await client.functions.invoke('manage-mechanic',{body:{garageId,profileId,action,fullName}});
+    if(error)throw error;if(data?.error)throw new Error(data.error);
+    await loadRecords();render();
+  }
+  function openEditMechanicDialog(profileId){
+    if(!isAdmin())return;
+    const member=staff.find(s=>s.profileId===profileId);if(!member||member.role!=='mechanic')return;
+    const old=$('#data-dialog');if(old)old.remove();
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><form id="edit-mechanic-form"><div class="dialog-head"><h2>Modifier le mécanicien</h2><button class="icon-btn" type="button" data-action="close">×</button></div><div class="form-grid"><label class="full">Nom complet<input name="full_name" required maxlength="100" value="'+esc(member.profile.full_name||'')+'"></label></div><div id="edit-mechanic-message" class="notice" hidden></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer</button></div></form></dialog>');
+    const dlg=$('#data-dialog');dlg.showModal();
+    $('#edit-mechanic-form').addEventListener('submit',async ev=>{ev.preventDefault();const btn=ev.currentTarget.querySelector('[type=submit]');btn.disabled=true;try{await manageMechanic(profileId,'rename',ev.currentTarget.elements.full_name.value.trim());dlg.close();dlg.remove();}catch(err){notice('#edit-mechanic-message',errorMessage(err),'error');btn.disabled=false;}});
   }
   function openAddMechanicDialog(){
     if(!isAdmin())return;
@@ -527,7 +544,7 @@
     if(action==='status')return;
     if(action==='ready'){const v=records.find(x=>x.id===id);if(v&&confirm('Préparer un SMS indiquant que le véhicule est prêt ?'))sms(v);}
     if(action==='new-appointment')openAppointmentForm();
-    if(action==='open-add-mechanic')openAddMechanicDialog();
+    if(action==='open-add-mechanic')openAddMechanicDialog();\n    if(action==='edit-mechanic')openEditMechanicDialog(id);\n    if(action==='toggle-mechanic'){const active=btn.dataset.active==='true';if(confirm(active?'Suspendre l’accès de ce mécanicien ?':'Réactiver l’accès de ce mécanicien ?'))manageMechanic(id,active?'deactivate':'activate').catch(err=>alert(errorMessage(err)));}
     if(action==='add-mechanic')addMechanic(id).catch(err=>alert(errorMessage(err)));
     if(action==='appointment'){const a=appointments.find(x=>x.id===id);if(a)alert(a.title+' | '+timeLabel(a.starts_at)+' – '+timeLabel(a.ends_at)+' | '+(a.notes||'Aucune note'));}
     if(action==='inspection'){const v=records.find(x=>x.id===id);if(v?.orderId)openInspection(v.orderId).catch(err=>alert(errorMessage(err)));}
