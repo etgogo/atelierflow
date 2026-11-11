@@ -339,7 +339,7 @@
       '<h3 class="full">Informations du véhicule</h3><label>Marque<input name="brand" required maxlength="60" value="'+esc(v.brand)+'"></label><label>Modèle<input name="model" required maxlength="60" value="'+esc(v.model)+'"></label><label>Immatriculation<input name="plate" required maxlength="30" value="'+esc(v.plate)+'"></label><label>Numéro de châssis (VIN)<input name="vin" maxlength="40" value="'+esc(v.vin)+'"></label><label>Couleur<input name="color" maxlength="60" value="'+esc(v.color)+'"></label><label>Année<input name="year" type="number" min="1886" max="2100" step="1" value="'+esc(v.year)+'"></label><label>Carburant<input name="fuelType" maxlength="40" value="'+esc(v.fuelType)+'"></label><label>Kilométrage actuel<input name="mileageCurrent" type="number" min="0" step="1" value="'+esc(v.mileageCurrent)+'"></label><label class="full">Notes sur le véhicule<textarea name="vehicleNotes" rows="2" maxlength="1500">'+esc(v.vehicleNotes)+'</textarea></label>'+
       '<h3 class="full">Intervention et suivi</h3><label class="full">Travail demandé<textarea name="workRequested" rows="3" maxlength="1500">'+esc(v.workRequested)+'</textarea></label><label class="full">Travail effectué / notes<textarea name="workDone" rows="4">'+esc(v.workDone)+'</textarea></label><label class="full">Tâches / opérations réalisées (une par ligne)<textarea name="tasks" rows="4">'+esc(v.tasks.join('\n'))+'</textarea></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer les modifications</button></div></form></dialog>';
     } else if(kind==='quote' && v) {
-      html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Créer le devis du véhicule</h2><button class="icon-btn" type="button" data-action="close">×</button></div><input type="hidden" name="id" value="'+esc(v.id)+'"><div class="form-grid"><label class="full">Titre / diagnostic<textarea name="description" required rows="2" placeholder="Ex. Remplacement des plaquettes avant"></textarea></label><label>Pièce / opération 1<input name="item1" maxlength="160" placeholder="Plaquettes de frein"></label><label>Quantité<input name="qty1" type="number" min="0.01" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price1" type="number" min="0" step="0.01" value="0"></label><label>Pièce / opération 2<input name="item2" maxlength="160"></label><label>Quantité<input name="qty2" type="number" min="0.01" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price2" type="number" min="0" step="0.01" value="0"></label><label>Pièce / opération 3<input name="item3" maxlength="160"></label><label>Quantité<input name="qty3" type="number" min="0.01" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price3" type="number" min="0" step="0.01" value="0"></label><label>Heures de main-d’œuvre<input name="labor_hours" type="number" min="0" step="0.25" value="0"></label><label>Taux horaire (€ / h)<input name="labor_rate" type="number" min="0" step="0.01" value="60"></label><p class="muted full">Le total est calculé automatiquement à partir des pièces, opérations et heures de main-d’œuvre.</p></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer et joindre au contrôle</button></div></form></dialog>';
+      html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Créer le devis du véhicule</h2><button class="icon-btn" type="button" data-action="close">×</button></div><input type="hidden" name="id" value="'+esc(v.id)+'"><div class="form-grid"><label class="full">Titre / diagnostic<textarea name="description" required rows="2" placeholder="Ex. Remplacement des plaquettes avant"></textarea></label><label>Pièce / opération 1<input name="item1" maxlength="160" placeholder="Plaquettes de frein"></label><label>Quantité<input name="qty1" type="number" min="0.01" max="1000000" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price1" type="number" min="0" max="1000000000" step="0.01" value="0"></label><label>Pièce / opération 2<input name="item2" maxlength="160"></label><label>Quantité<input name="qty2" type="number" min="0.01" max="1000000" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price2" type="number" min="0" max="1000000000" step="0.01" value="0"></label><label>Pièce / opération 3<input name="item3" maxlength="160"></label><label>Quantité<input name="qty3" type="number" min="0.01" max="1000000" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price3" type="number" min="0" max="1000000000" step="0.01" value="0"></label><label>Heures de main-d’œuvre<input name="labor_hours" type="number" min="0" max="1000" step="0.25" value="0"></label><label>Taux horaire (€ / h)<input name="labor_rate" type="number" min="0" max="1000000" step="0.01" value="60"></label><p class="muted full">Le total est calculé automatiquement à partir des pièces, opérations et heures de main-d’œuvre.</p></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer et joindre au contrôle</button></div></form></dialog>';
     }
     if(!html)return;
     const old=$('#data-dialog'); if(old)old.remove();
@@ -352,8 +352,14 @@
         if(kind==='new') await createVehicle(data);
         if(kind==='edit') await saveEdit(data);
         if(kind==='quote') await addQuote(data);
-        dlg.close(); dlg.remove(); await loadRecords(); render();
-      } catch(err) { alert('Impossible d’enregistrer : '+errorMessage(err)); submit.disabled=false; submit.textContent='Réessayer'; }
+      } catch(err) {
+        alert('Impossible d’enregistrer : '+errorMessage(err));
+        submit.disabled=false; submit.textContent='Réessayer';
+        return;
+      }
+      dlg.close(); dlg.remove();
+      try { await loadRecords(); render(); }
+      catch(err) { alert((kind==='quote'?'Le devis a bien été enregistré, mais la liste n’a pas pu être actualisée.':'L’enregistrement a réussi, mais la liste n’a pas pu être actualisée.')+' '+errorMessage(err)); }
     });
   }
 
@@ -420,20 +426,32 @@
 
   async function addQuote(d) {
     const v=records.find(x=>x.id===d.get('id')); if(!v||!v.orderId)throw new Error('Ordre de travail introuvable.');
+    const title=String(d.get('description')||'').trim();
+    if(!title)throw new Error('Indiquez le titre ou le diagnostic du devis.');
+    const readNumber=(name,fallback)=>{
+      const raw=String(d.get(name)??'').trim().replace(/\\s/g,'').replace(',','.');
+      if(!raw)return fallback;
+      const value=Number(raw);
+      if(!Number.isFinite(value))throw new Error('Vérifiez le champ '+name+'.');
+      return value;
+    };
     const items=[];
     for(let n=1;n<=3;n++){
       const description=String(d.get('item'+n)||'').trim();
       if(!description)continue;
-      const quantity=Number(d.get('qty'+n)||1),unitPrice=Number(d.get('price'+n)||0);
-      if(!(quantity>0)||unitPrice<0)throw new Error('Vérifiez les quantités et les prix des pièces.');
-      items.push({description,quantity,unit_price:unitPrice,total_price:quantity*unitPrice});
+      const quantity=readNumber('qty'+n,1),unitPrice=readNumber('price'+n,0);
+      if(!(quantity>0)||quantity>1000000||unitPrice<0||unitPrice>1000000000)throw new Error('Vérifiez les quantités et les prix des pièces.');
+      const total=Math.round((quantity*unitPrice+Number.EPSILON)*100)/100;
+      if(!Number.isFinite(total))throw new Error('Le total d’une ligne est invalide.');
+      items.push({description,quantity,unit_price:Math.round((unitPrice+Number.EPSILON)*100)/100,total_price:total});
     }
-    const hours=Number(d.get('labor_hours')||0),rate=Number(d.get('labor_rate')||0);
-    if(hours<0||rate<0)throw new Error('La main-d’œuvre doit avoir des valeurs positives.');
-    if(hours>0)items.push({description:'Main-d’œuvre ('+hours+' h)',quantity:hours,unit_price:rate,total_price:hours*rate});
+    const hours=readNumber('labor_hours',0),rate=readNumber('labor_rate',0);
+    if(hours<0||hours>1000||rate<0||rate>1000000)throw new Error('Vérifiez les heures et le taux horaire de la main-d’œuvre.');
+    if(hours>0)items.push({description:'Main-d’œuvre ('+hours+' h)',quantity:hours,unit_price:Math.round((rate+Number.EPSILON)*100)/100,total_price:Math.round((hours*rate+Number.EPSILON)*100)/100});
     if(!items.length)throw new Error('Ajoutez au moins une pièce ou une ligne de main-d’œuvre.');
-    const amount=items.reduce((sum,it)=>sum+it.total_price,0);
-    const {data:q,error}=await client.from('quotes').insert({garage_id:garageId,work_order_id:v.orderId,vehicle_id:v.id,quote_number:'AF-'+Date.now(),title:String(d.get('description')).trim(),amount,status:'pending',created_by:user.id}).select().single();
+    const amount=Math.round((items.reduce((sum,it)=>sum+it.total_price,0)+Number.EPSILON)*100)/100;
+    if(!Number.isFinite(amount)||amount>9999999999.99)throw new Error('Le total du devis dépasse la limite autorisée. Vérifiez les quantités et les prix saisis.');
+    const {data:q,error}=await client.from('quotes').insert({garage_id:garageId,work_order_id:v.orderId,vehicle_id:v.id,quote_number:'AF-'+Date.now(),title,amount,status:'pending',created_by:user.id}).select().single();
     if(error)throw error;
     const payload=items.map(it=>({quote_id:q.id,...it}));
     const {error:itemError}=await client.from('quote_items').insert(payload);
@@ -815,16 +833,40 @@
     if(error)throw error;
     const idx=inspectionResults.findIndex(r=>r.item_id===itemId);if(idx>=0)inspectionResults[idx]=data;else inspectionResults.push(data);
   }
-  async function submitInspection(){
+  async function submitInspection(button){
     if(!['in_progress','completed'].includes(activeInspection?.status))return;
-    await inspectionSaveQueue;await inspectionAttachmentQueue;
-    const {data:latestResults,error:resultsError}=await client.from('inspection_results').select('*').eq('inspection_id',activeInspection.id);
-    if(resultsError)throw resultsError;inspectionResults=latestResults||[];
-    const missing=checklistItems.filter(i=>{const r=inspectionResults.find(x=>x.item_id===i.id);return !r||!r.state||(r.state==='anomaly'&&!String(r.note||'').trim());});
-    if(missing.length){alert('Il reste '+missing.length+' contrôle(s) à compléter ou des anomalies sans commentaire ('+missing.length+').');return;}
-    const {data,error}=await client.from('inspections').update({status:'submitted'}).eq('id',activeInspection.id).eq('garage_id',garageId).select().single();
-    if(error)throw error;activeInspection=data;alert('Véhicule transmis à l’administration.');
-    await loadRecords();if(isAdmin())renderInspection(activeInspection.work_order_id);else{view='planning';render();}
+    if(button){button.disabled=true;button.textContent='Transmission…';}
+    let completed=false;
+    try{
+      await inspectionSaveQueue;await inspectionAttachmentQueue;
+      const {data:current,error:currentError}=await client.from('inspections').select('*').eq('id',activeInspection.id).eq('garage_id',garageId).maybeSingle();
+      if(currentError)throw currentError;
+      if(!current)throw new Error('Le contrôle est introuvable. Actualisez la page puis réessayez.');
+      activeInspection=current;
+      if(!['in_progress','completed'].includes(current.status)){
+        renderInspection(current.work_order_id);
+        alert(current.status==='archived'?'Ce contrôle a déjà été archivé par l’administration. Il ne peut plus être transmis.':'Ce contrôle a déjà été transmis à l’administration.');
+        return;
+      }
+      const {data:latestResults,error:resultsError}=await client.from('inspection_results').select('*').eq('inspection_id',current.id);
+      if(resultsError)throw resultsError;inspectionResults=latestResults||[];
+      const missing=checklistItems.filter(i=>{const r=inspectionResults.find(x=>x.item_id===i.id);return !r||!r.state||(r.state==='anomaly'&&!String(r.note||'').trim());});
+      if(missing.length){alert('Il reste '+missing.length+' contrôle(s) à compléter ou des anomalies sans commentaire ('+missing.length+').');return;}
+      const {data,error}=await client.from('inspections').update({status:'submitted'}).eq('id',current.id).eq('garage_id',garageId).in('status',['in_progress','completed']).select().maybeSingle();
+      if(error)throw error;
+      if(!data){
+        const {data:latest,error:latestError}=await client.from('inspections').select('*').eq('id',current.id).eq('garage_id',garageId).maybeSingle();
+        if(latestError)throw latestError;
+        if(latest){activeInspection=latest;renderInspection(latest.work_order_id);}
+        alert('Le statut du contrôle a changé. Actualisez la page et vérifiez avec l’administration.');
+        return;
+      }
+      activeInspection=data;alert('Véhicule transmis à l’administration.');
+      await loadRecords();if(isAdmin())renderInspection(activeInspection.work_order_id);else{view='planning';render();}
+      completed=true;
+    }finally{
+      if(button&&!completed&&button.isConnected){button.disabled=false;button.textContent='Passer à l’étape supérieure →';}
+    }
   }
 
   async function uploadInspectionAttachments(itemId,fileList){
@@ -892,7 +934,7 @@
     if(action==='appointment'){const a=appointments.find(x=>x.id===id);if(a)openAppointmentDetails(a);}
     if(action==='inspection'){const v=records.find(x=>x.id===id);if(v?.orderId)openInspection(v.orderId).catch(err=>alert(errorMessage(err)));}
     if(action==='back-orders'){view=isAdmin()?'orders':'planning';render();}
-    if(action==='finish-inspection')submitInspection().catch(err=>alert(errorMessage(err)));
+    if(action==='finish-inspection')submitInspection(btn).catch(err=>alert(errorMessage(err)));
     if(action==='start-inspection'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}openInspection(btn.dataset.workOrderId,btn.dataset.appointmentId).catch(err=>alert(errorMessage(err)));}
     if(action==='review-inspection')openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));
     if(action==='message-client'||action==='open-client-message'){if(!isAdmin())return;try{openClientMessageDialog(id);}catch(err){alert(errorMessage(err));}}
