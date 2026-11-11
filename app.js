@@ -769,11 +769,15 @@
     const {data:items,error:it}=await client.from('checklist_items').select('*').eq('garage_id',garageId).eq('is_active',true).order('sort_order');
     if(it)throw it;checklistItems=items||[];
   }
-  async function openInspection(workOrderId){
+  async function openInspection(workOrderId,appointmentId){
     if(!workOrderId)throw new Error('Aucun ordre de travail lié à ce créneau.');
     await ensureChecklist();
     const {data:ins,error}=await client.from('inspections').select('*').eq('work_order_id',workOrderId).eq('template_id',checklistTemplate.id).order('created_at',{ascending:false}).limit(1);
-    if(error)throw error;activeInspection=ins?.[0]||null;
+    if(error)throw error;
+    const latestInspection=ins?.[0]||null;
+    const appointment=appointmentId?appointments.find(a=>a.id===appointmentId):null;
+    const isNewAppointmentAfterPreviousControl=!!(appointment&&latestInspection&&['submitted','archived'].includes(latestInspection.status)&&new Date(appointment.created_at)>new Date(latestInspection.created_at));
+    activeInspection=isNewAppointmentAfterPreviousControl?null:latestInspection;
     if(!activeInspection){
       const {data:i,error:ie}=await client.from('inspections').insert({garage_id:garageId,work_order_id:workOrderId,template_id:checklistTemplate.id,conducted_by:user.id,status:'in_progress'}).select().single();
       if(ie)throw ie;activeInspection=i;inspections.unshift(i);
@@ -845,7 +849,7 @@
   function openAppointmentDetails(a){
     const v=records.find(x=>x.orderId===a.work_order_id);
     const old=$('#data-dialog');if(old)old.remove();
-    const action=a.work_order_id?'<button class="primary-btn" type="button" data-action="start-inspection" data-work-order-id="'+esc(a.work_order_id)+'">Commencer la validation du véhicule</button>':'';
+    const action=a.work_order_id?'<button class="primary-btn" type="button" data-action="start-inspection" data-work-order-id="'+esc(a.work_order_id)+'" data-appointment-id="'+esc(a.id)+'">Commencer la validation du véhicule</button>':'';
     const adminActions=isAdmin()?'<button class="secondary-btn" type="button" data-action="edit-appointment" data-id="'+esc(a.id)+'">Modifier le rendez-vous</button><button class="secondary-btn" type="button" data-action="cancel-appointment" data-id="'+esc(a.id)+'">Annuler / client absent</button>':'';
     document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><div class="dialog-head"><h2>'+esc(a.title)+'</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">'+timeLabel(a.starts_at)+' – '+timeLabel(a.ends_at)+'</p><p>'+(v?esc(v.brand+' '+v.model+' · '+v.plate+' — '+v.clientName):'Intervention atelier')+'</p><p class="muted">'+esc(a.notes||'Aucune note')+'</p><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Fermer</button>'+adminActions+action+'</div></dialog>');
     $('#data-dialog').showModal();
@@ -889,7 +893,7 @@
     if(action==='inspection'){const v=records.find(x=>x.id===id);if(v?.orderId)openInspection(v.orderId).catch(err=>alert(errorMessage(err)));}
     if(action==='back-orders'){view=isAdmin()?'orders':'planning';render();}
     if(action==='finish-inspection')submitInspection().catch(err=>alert(errorMessage(err)));
-    if(action==='start-inspection'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));}
+    if(action==='start-inspection'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}openInspection(btn.dataset.workOrderId,btn.dataset.appointmentId).catch(err=>alert(errorMessage(err)));}
     if(action==='review-inspection')openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));
     if(action==='message-client'||action==='open-client-message'){if(!isAdmin())return;try{openClientMessageDialog(id);}catch(err){alert(errorMessage(err));}}
     if(action==='launch-client-message')launchClientMessage().catch(err=>alert(errorMessage(err)));
