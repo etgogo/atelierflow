@@ -20,8 +20,10 @@ SET search_path = pg_catalog, public
 AS $$
   SELECT gm.garage_id
   FROM public.garage_memberships gm
+  JOIN public.profiles p ON p.id = gm.profile_id
   WHERE gm.profile_id = public.current_profile_id()
-    AND gm.is_active = TRUE;
+    AND gm.is_active = TRUE
+    AND p.is_active = TRUE;
 $$;
 
 CREATE OR REPLACE FUNCTION public.is_garage_member(p_garage_id UUID)
@@ -34,9 +36,11 @@ AS $$
   SELECT EXISTS (
     SELECT 1
     FROM public.garage_memberships gm
+    JOIN public.profiles p ON p.id = gm.profile_id
     WHERE gm.garage_id = p_garage_id
       AND gm.profile_id = public.current_profile_id()
       AND gm.is_active = TRUE
+      AND p.is_active = TRUE
   );
 $$;
 
@@ -69,11 +73,13 @@ AS $$
       EXISTS (
         SELECT 1
         FROM public.garage_memberships gm
+        JOIN public.profiles p ON p.id = gm.profile_id
         LEFT JOIN public.membership_permissions mp
           ON mp.membership_id = gm.id AND mp.permission_key = p_permission_key
         WHERE gm.garage_id = p_garage_id
           AND gm.profile_id = public.current_profile_id()
           AND gm.is_active = TRUE
+          AND p.is_active = TRUE
           AND (gm.role = 'admin' OR COALESCE(mp.allowed, FALSE) = TRUE)
       )
     ),
@@ -93,9 +99,11 @@ AS $$
     FROM public.work_orders wo
     JOIN public.garage_memberships gm
       ON gm.garage_id = wo.garage_id
+    JOIN public.profiles p ON p.id = gm.profile_id
     WHERE wo.id = p_work_order_id
       AND gm.profile_id = public.current_profile_id()
       AND gm.is_active = TRUE
+      AND p.is_active = TRUE
   );
 $$;
 
