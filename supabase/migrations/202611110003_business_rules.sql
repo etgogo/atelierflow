@@ -136,7 +136,11 @@ FOR EACH ROW
 EXECUTE FUNCTION public.check_mileage_consistency();
 
 CREATE OR REPLACE FUNCTION public.audit_change()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $
 BEGIN
   INSERT INTO public.audit_logs (
     garage_id,
@@ -158,18 +162,53 @@ BEGIN
     )
   );
 
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$;
 
 CREATE OR REPLACE FUNCTION public.record_audit_triggers()
-RETURNS VOID AS $$
+RETURNS VOID
+LANGUAGE plpgsql
+AS $
+DECLARE
+  v_table TEXT;
 BEGIN
-  -- The audit trigger is created per table to avoid mass operations on protected tables.
-  -- It uses auth.uid() and the current user identity if available.
-  NULL;
+  FOREACH v_table IN ARRAY ARRAY[
+    'garage_memberships',
+    'permission_definitions',
+    'mechanic_profiles',
+    'clients',
+    'vehicles',
+    'work_orders',
+    'appointments',
+    'appointment_mechanics',
+    'mileage_readings',
+    'key_custody_events',
+    'checklist_templates',
+    'checklist_categories',
+    'checklist_items',
+    'inspections',
+    'inspection_results',
+    'anomalies',
+    'attachments',
+    'parts',
+    'work_order_parts',
+    'quotes',
+    'reports'
+  ] LOOP
+    EXECUTE format('DROP TRIGGER IF EXISTS audit_change_row ON public.%I', v_table);
+    EXECUTE format(
+      'CREATE TRIGGER audit_change_row AFTER INSERT OR UPDATE OR DELETE ON public.%I FOR EACH ROW EXECUTE FUNCTION public.audit_change()',
+      v_table
+    );
+  END LOOP;
 END;
-$$ LANGUAGE plpgsql;
+$;
+
+SELECT public.record_audit_triggers();
 
 -- Example of a helper view for planning cells and key status.
 CREATE OR REPLACE VIEW public.v_vehicle_key_status AS
