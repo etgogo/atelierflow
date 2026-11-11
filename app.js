@@ -698,7 +698,7 @@
     if(action==='add-quote')openForm('quote',id);
     if(action==='close'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}}
     if(action==='status')return;
-    if(action==='ready'){const v=records.find(x=>x.id===id);if(v&&confirm('Préparer un SMS indiquant que le véhicule est prêt ?'))sms(v);}
+    if(action==='ready'){if(isAdmin())openClientMessageDialog(id);}
     if(action==='new-appointment')openAppointmentForm();
     if(action==='open-add-mechanic')openAddMechanicDialog();
     if(action==='edit-mechanic')openEditMechanicDialog(id);
