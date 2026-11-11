@@ -267,7 +267,7 @@
     document.querySelectorAll('.nav-item').forEach(b=>{ b.hidden = !isAdmin() ? b.dataset.view !== 'planning' : false; });
     $('#new-vehicle').hidden = !isAdmin();
     if (!isAdmin() && view !== 'planning') view='planning';
-    const titles={dashboard:t('dashboard'),vehicles:t('vehicles'),orders:t('orders'),quotes:t('quotes'),planning:t('planning'),handoffs:'Véhicules à remettre',archives:'Archives',team:t('team'),settings:t('settings')};
+    const titles={dashboard:t('dashboard'),vehicles:t('vehicles'),orders:t('orders'),quotes:t('quotes'),planning:t('planning'),handoffs:'Véhicules à remettre',archives:'Historique',team:t('team'),settings:t('settings')};
     $('#page-title').textContent=titles[view]||titles.dashboard;
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
     if(view==='dashboard') {
@@ -298,7 +298,7 @@
   }
   function renderArchives(){
     const archived=records.filter(v=>v.status==='Clôturé');
-    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Véhicules archivés</h2><p class="muted">Dossiers terminés et rangés dans les archives.</p></div></div>'+vehicleRows(archived)+'</section>';
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Historique des véhicules</h2><p class="muted">Dossiers terminés, remis aux clients et archivés.</p></div></div>'+vehicleRows(archived)+'</section>';
   }
   function orderDetail(v) {
     const statusOptions=['À planifier','En cours','En attente client','Prêt à récupérer','Annulé'];
@@ -574,7 +574,7 @@
     const done=inspectionResults.filter(r=>r.state==='ok'||r.state==='anomaly'||r.state==='n/a').length;
     const editable=activeInspection.status==='in_progress';
     const adminReview=isAdmin()&&activeInspection.status==='submitted';
-    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour au planning</button></div><p class="muted">Sélectionnez un résultat pour chaque point. Un commentaire est obligatoire uniquement en cas d’anomalie ou de non-conformité.</p><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés · '+(activeInspection.status==='submitted'?'Transmis à l’administration':activeInspection.status==='archived'?'Archivé':'En cours')+'</div>'+sections+'<div class="button-row">'+(editable?'<button class="primary-btn" data-action="finish-inspection">Rendre le véhicule</button>':adminReview?'<button class="secondary-btn" data-action="message-client" data-id="'+esc(v?.id||'')+'">Envoyer un message au client</button><button class="primary-btn" data-action="archive-vehicle" data-id="'+esc(v?.id||'')+'">Confirmer la remise et archiver</button>':'<span class="muted">Ce contrôle est en lecture seule.</span>')+'</div></section>';
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour au planning</button></div><p class="muted">Sélectionnez un résultat pour chaque point. Un commentaire est obligatoire uniquement en cas d’anomalie ou de non-conformité.</p><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés · '+(activeInspection.status==='submitted'?'Transmis à l’administration':activeInspection.status==='archived'?'Archivé':'En cours')+'</div>'+sections+'<div class="button-row">'+(editable?'<button class="primary-btn" data-action="finish-inspection">Valider et transmettre à l’administration</button>':adminReview?'<button class="secondary-btn" data-action="message-client" data-id="'+esc(v?.id||'')+'">Envoyer un message au client</button><button class="primary-btn" data-action="archive-vehicle" data-id="'+esc(v?.id||'')+'">Confirmer la remise et archiver</button>':'<span class="muted">Ce contrôle est en lecture seule.</span>')+'</div></section>';
   }
   async function saveInspectionResult(itemId,patch){
     if(activeInspection?.status!=='in_progress')throw new Error('Ce contrôle n’est plus modifiable.');
