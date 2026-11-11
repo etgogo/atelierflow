@@ -7,12 +7,14 @@ This folder contains draft database migrations for review. They have not yet bee
 - `supabase/migrations/202611110001_initial_schema.sql`
 - `supabase/migrations/202611110002_rls_and_policies.sql`
 - `supabase/migrations/202611110003_business_rules.sql`
+- `supabase/migrations/202611110004_access_grants_and_garage_bootstrap.sql`
 
 ## Purpose
 
 These scripts create the database schema, access-control layer, and PostgreSQL business rules needed for the garage management domain:
 
-- garage and membership management
+- garage and membership management, including a one-time first-garage bootstrap RPC
+- explicit authenticated-role SQL grants with RLS remaining the access-control boundary
 - roles and permissions
 - client and vehicle records
 - work orders and appointments
