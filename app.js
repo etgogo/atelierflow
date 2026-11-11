@@ -501,37 +501,65 @@
   }
   function openClientMessageDialog(vehicleId){
     if(!isAdmin())return;
-    const v=records.find(x=>x.id===vehicleId);if(!v?.orderId)throw new Error('Dossier introuvable.');
+    const v=records.find(x=>x.id===vehicleId);
+    if(!v)throw new Error('Dossier introuvable.');
     if(!v.phone&&!v.email)throw new Error('Ajoutez un numéro de téléphone ou une adresse e-mail au client.');
-    const quotes=[...(v.quotes||[])].sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
-    if(!quotes.length)throw new Error('Aucun devis n’est enregistré pour ce véhicule. Créez d’abord un devis dans son dossier.');
-    const defaultQuote=quotes[0];
-    const message='Bonjour '+v.clientName+', le contrôle de votre '+v.brand+' '+v.model+' ('+v.plate+') est terminé. Vous trouverez votre devis PDF via le lien ci-dessous. Contactez-nous pour toute question. Merci.';
-    pendingClientMessage={vehicleId,channel:v.phone?'sms':'email',message,launched:false,quoteId:defaultQuote.id};
+    const quotes=[...(v.quotes||[])].sort((a,b)=>new Date(b.createdAt||b.created_at||0)-new Date(a.createdAt||a.created_at||0));
+    const defaultQuote=quotes[0]||null;
+    const message='Bonjour '+v.clientName+', le contrôle de votre '+v.brand+' '+v.model+' ('+v.plate+') est terminé. Contactez-nous pour toute question. Merci.';
+    pendingClientMessage={vehicleId,channel:v.phone?'sms':'email',message,launched:false,quoteId:defaultQuote?.id||null,preparedUrl:null};
     const old=$('#data-dialog');if(old)old.remove();
-    const quoteOptions=quotes.map(q=>'<option value="'+esc(q.id)+'">'+esc((q.quote_number||'Devis')+' — '+(q.title||q.description||'')+' — '+money(q.amount))+'</option>').join('');
-    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><div class="dialog-head"><h2>Envoyer le devis au client</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Le devis sera généré en PDF et hébergé avec un lien sécurisé. Le client pourra l’ouvrir depuis le SMS ou l’e-mail.</p><label>Devis à joindre (PDF)<select id="client-message-quote">'+quoteOptions+'</select></label><label>Envoyer par<select id="client-message-channel"><option value="sms" '+(v.phone?'':'disabled')+'>SMS'+(v.phone?'':' — numéro absent')+'</option><option value="email" '+(v.phone?'':'selected')+' '+(v.email?'':'disabled')+'>E-mail'+(v.email?'':' — adresse absente')+'</option></select></label><label>Message<textarea id="client-message-body" rows="5">'+esc(message)+'</textarea></label><p class="muted">Le lien PDF est ajouté automatiquement au message. Il reste accessible pendant 7 jours.</p><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="button" data-action="launch-client-message">Générer le PDF et ouvrir SMS / Mail</button><button class="secondary-btn" type="button" data-action="confirm-client-message" disabled>J’ai envoyé — archiver</button></div></dialog>');
+    const quoteOptions='<option value="">Sans devis PDF</option>'+quotes.map(q=>'<option value="'+esc(q.id)+'" '+(q.id===defaultQuote?.id?'selected':'')+'>'+esc((q.quote_number||'Devis')+' — '+(q.title||q.description||'')+' — '+money(q.amount))+'</option>').join('');
+    const quoteInfo=quotes.length?'Choisis un devis si tu veux l’ajouter au message en PDF.':'Aucun devis n’est enregistré : tu peux quand même préparer le SMS ou l’e-mail sans PDF.';
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><div class="dialog-head"><h2>Préparer un SMS / e-mail</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Vérifie les coordonnées et le texte avant d’ouvrir ton application de messagerie.</p><label>Devis à joindre (facultatif)<select id="client-message-quote">'+quoteOptions+'</select></label><p id="client-message-status" class="muted">'+esc(quoteInfo)+'</p><label>Envoyer par<select id="client-message-channel"><option value="sms" '+(v.phone?'':'disabled')+'>SMS'+(v.phone?'':' — numéro absent')+'</option><option value="email" '+(!v.phone&&v.email?'selected':'')+' '+(v.email?'':'disabled')+'>E-mail'+(v.email?'':' — adresse absente')+'</option></select></label><label>Message<textarea id="client-message-body" rows="5">'+esc(message)+'</textarea></label><p class="muted">Le PDF, s’il est sélectionné, est partagé par un lien sécurisé valable 7 jours.</p><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="button" data-action="launch-client-message">Préparer le message</button><button class="secondary-btn" type="button" data-action="confirm-client-message" disabled>J’ai envoyé — archiver</button></div></dialog>');
     $('#data-dialog').showModal();
   }
   async function launchClientMessage(){
     if(!pendingClientMessage)throw new Error('Aucun message en préparation.');
-    const v=records.find(x=>x.id===pendingClientMessage.vehicleId),channel=$('#client-message-channel').value,quoteId=$('#client-message-quote').value;
-    const quote=(v?.quotes||[]).find(q=>q.id===quoteId);if(!quote)throw new Error('Sélectionnez un devis valide.');
-    let message=$('#client-message-body').value.trim();if(!message)throw new Error('Le message ne peut pas être vide.');
-    const btn=$('[data-action="launch-client-message"]');btn.disabled=true;btn.textContent='Génération du PDF…';
+    const v=records.find(x=>x.id===pendingClientMessage.vehicleId);
+    const channel=$('#client-message-channel')?.value;
+    const quoteId=$('#client-message-quote')?.value||'';
+    const quote=quoteId?(v?.quotes||[]).find(q=>q.id===quoteId):null;
+    if(quoteId&&!quote)throw new Error('Le devis sélectionné est introuvable. Choisis-le à nouveau.');
+    if(channel==='sms'&&!v?.phone)throw new Error('Numéro de téléphone manquant.');
+    if(channel==='email'&&!v?.email)throw new Error('Adresse e-mail manquante.');
+    let message=$('#client-message-body').value.trim();
+    if(!message)throw new Error('Le message ne peut pas être vide.');
+    const btn=$('[data-action="launch-client-message"]');
+    btn.disabled=true;
+    btn.textContent=quote?'Génération du PDF…':'Préparation…';
     try{
-      const pdfLink=await createQuotePdfLink(v,quote);
-      message=message+'\n\nVotre devis en PDF : '+pdfLink;
-      if(channel==='sms'){
-        if(!v.phone)throw new Error('Numéro de téléphone manquant.');
-        window.location.href='sms:'+encodeURIComponent(v.phone)+'&body='+encodeURIComponent(message);
-      }else{
-        if(!v.email)throw new Error('Adresse e-mail manquante.');
-        window.location.href='mailto:'+encodeURIComponent(v.email)+'?subject='+encodeURIComponent('Votre devis '+(quote.quote_number||'')+' — '+garageName)+'&body='+encodeURIComponent(message);
+      if(quote){
+        const pdfLink=await createQuotePdfLink(v,quote);
+        message+='\n\nVotre devis en PDF : '+pdfLink;
       }
-      pendingClientMessage={...pendingClientMessage,channel,message,quoteId,launched:true};
-      $('[data-action="confirm-client-message"]').disabled=false;
-    }finally{btn.disabled=false;btn.textContent='Générer le PDF et ouvrir SMS / Mail';}
+      let preparedUrl='';
+      if(channel==='sms'){
+        const phone=String(v.phone).replace(/[^\d+]/g,'');
+        preparedUrl='sms:'+phone+'?&body='+encodeURIComponent(message);
+      }else{
+        const subject=quote?'Votre devis '+(quote.quote_number||'')+' — '+garageName:'Votre véhicule — '+garageName;
+        preparedUrl='mailto:'+v.email+'?subject='+encodeURIComponent(subject)+'&body='+encodeURIComponent(message);
+      }
+      pendingClientMessage={...pendingClientMessage,channel,message,quoteId:quote?.id||null,preparedUrl,launched:false};
+      btn.dataset.action='open-prepared-client-message';
+      btn.textContent=channel==='sms'?'Ouvrir les SMS':'Ouvrir Mail';
+      btn.disabled=false;
+      const status=$('#client-message-status');
+      if(status)status.textContent=quote?'Le PDF est prêt. Appuie maintenant sur « Ouvrir » pour lancer ton application.':'Le message est prêt. Appuie maintenant sur « Ouvrir » pour lancer ton application.';
+    }catch(err){
+      btn.disabled=false;
+      btn.textContent='Réessayer';
+      throw err;
+    }
+  }
+  function openPreparedClientMessage(){
+    if(!pendingClientMessage?.preparedUrl)throw new Error('Prépare d’abord le message.');
+    const url=pendingClientMessage.preparedUrl;
+    pendingClientMessage={...pendingClientMessage,launched:true};
+    const confirmBtn=$('[data-action="confirm-client-message"]');
+    if(confirmBtn)confirmBtn.disabled=false;
+    window.location.href=url;
   }
   async function confirmClientMessageAndArchive(){
     if(!pendingClientMessage?.launched)throw new Error('Ouvrez d’abord votre application SMS ou Mail et envoyez le message.');
@@ -849,7 +877,7 @@
     if(action==='add-quote')openForm('quote',id);
     if(action==='close'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}}
     if(action==='status')return;
-    if(action==='ready'){if(isAdmin())openClientMessageDialog(id);}
+    if(action==='ready'){if(isAdmin())try{openClientMessageDialog(id);}catch(err){alert(errorMessage(err));}}
     if(action==='new-appointment')openAppointmentForm();
     if(action==='edit-appointment'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}openAppointmentForm(id);}
     if(action==='cancel-appointment'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}cancelAppointment(id).catch(err=>alert(errorMessage(err)));}
@@ -863,9 +891,9 @@
     if(action==='finish-inspection')submitInspection().catch(err=>alert(errorMessage(err)));
     if(action==='start-inspection'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));}
     if(action==='review-inspection')openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));
-    if(action==='message-client'){if(!isAdmin())return;openClientMessageDialog(id);}
-    if(action==='open-client-message'){if(!isAdmin())return;openClientMessageDialog(id);}
+    if(action==='message-client'||action==='open-client-message'){if(!isAdmin())return;try{openClientMessageDialog(id);}catch(err){alert(errorMessage(err));}}
     if(action==='launch-client-message')launchClientMessage().catch(err=>alert(errorMessage(err)));
+    if(action==='open-prepared-client-message'){try{openPreparedClientMessage();}catch(err){alert(errorMessage(err));}}
     if(action==='confirm-client-message')confirmClientMessageAndArchive().catch(err=>alert(errorMessage(err)));
   });
   document.addEventListener('change',async ev=>{
