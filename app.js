@@ -353,15 +353,14 @@
     const candidates=staff.filter(s=>!s.mechanic);
     if(!candidates.length){alert('Tous les membres actuels ont déjà un profil mécanicien. Pour ajouter une nouvelle personne, elle doit d’abord créer son compte et rejoindre cet atelier.');return;}
     const options=candidates.map(s=>'<option value="'+esc(s.profileId)+'">'+esc(s.profile.full_name||'Compte sans nom')+' · '+esc(s.role==='admin'?'Administrateur':'Membre')+'</option>').join('');
-    showAppointmentDialog('<h2>Ajouter un mécanicien</h2><p class="muted">Choisissez une personne déjà membre de votre atelier. Son profil sera ajouté au planning.</p><div class="form-grid"><label class="full">Membre à ajouter<select name="mechanic_profile_id" required>'+options+'</select></label></div>');
-    const form=$('#data-form');
-    form.querySelector('[type=submit]').textContent='Créer le profil mécanicien';
-    form.removeEventListener('submit',()=>{});
-    form.addEventListener('submit',async ev=>{
-      ev.preventDefault();const btn=form.querySelector('[type=submit]');btn.disabled=true;
-      try{await addMechanic(form.elements.mechanic_profile_id.value);const dlg=$('#data-dialog');if(dlg){dlg.close();dlg.remove();}}
+    const old=$('#data-dialog');if(old)old.remove();
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><form id="add-mechanic-form"><div class="dialog-head"><h2>Ajouter un mécanicien</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Choisissez une personne déjà membre de votre atelier. Son profil sera ajouté au planning.</p><div class="form-grid"><label class="full">Membre à ajouter<select name="mechanic_profile_id" required>'+options+'</select></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le profil mécanicien</button></div></form></dialog>');
+    const dlg=$('#data-dialog');dlg.showModal();
+    $('#add-mechanic-form').addEventListener('submit',async ev=>{
+      ev.preventDefault();const form=ev.currentTarget,btn=form.querySelector('[type=submit]');btn.disabled=true;
+      try{await addMechanic(form.elements.mechanic_profile_id.value);dlg.close();dlg.remove();}
       catch(err){alert('Impossible de créer le profil : '+errorMessage(err));btn.disabled=false;}
-    },{once:true});
+    });
   }
   async function addMechanic(profileId){
     if(!isAdmin())throw new Error('Réservé à l’administrateur.');
