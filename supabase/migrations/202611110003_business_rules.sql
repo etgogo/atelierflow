@@ -23,6 +23,17 @@ BEGIN
       USING ERRCODE = 'foreign_key_violation';
   END IF;
 
+  -- The assigned mechanic must belong to the same garage as the appointment.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.mechanic_profiles AS mp
+    WHERE mp.id = NEW.mechanic_profile_id
+      AND mp.garage_id = v_garage_id
+  ) THEN
+    RAISE EXCEPTION 'Assigned mechanic must belong to the appointment garage.'
+      USING ERRCODE = 'foreign_key_violation';
+  END IF;
+
   -- Same-mechanic writes serialize; unrelated mechanics use different locks.
   PERFORM pg_advisory_xact_lock(
     hashtextextended(NEW.mechanic_profile_id::TEXT, 0)
@@ -37,6 +48,7 @@ BEGIN
       ON other_appointment.id = assigned.appointment_id
     WHERE assigned.mechanic_profile_id = NEW.mechanic_profile_id
       AND assigned.appointment_id <> NEW.appointment_id
+      AND other_appointment.status IN ('scheduled', 'in_progress')
       AND other_appointment.starts_at < v_ends_at
       AND other_appointment.ends_at > v_starts_at
   ) THEN
@@ -68,6 +80,10 @@ RETURNS TRIGGER AS $$
 DECLARE
   v_mechanic_id UUID;
 BEGIN
+  IF NEW.status IN ('cancelled', 'completed') THEN
+    RETURN NEW;
+  END IF;
+
   FOR v_mechanic_id IN
     SELECT DISTINCT am.mechanic_profile_id
     FROM public.appointment_mechanics AS am
@@ -88,6 +104,7 @@ BEGIN
       ON other_appointment.id = other_assigned.appointment_id
     WHERE assigned.appointment_id = NEW.id
       AND other_assigned.appointment_id <> NEW.id
+      AND other_appointment.status IN ('scheduled', 'in_progress')
       AND other_appointment.starts_at < NEW.ends_at
       AND other_appointment.ends_at > NEW.starts_at
   ) THEN
@@ -103,7 +120,7 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS appointments_time_overlap_guard ON public.appointments;
 CREATE TRIGGER appointments_time_overlap_guard
-BEFORE UPDATE OF starts_at, ends_at
+BEFORE UPDATE OF starts_at, ends_at, status
 ON public.appointments
 FOR EACH ROW
 EXECUTE FUNCTION public.check_appointment_time_overlap();
@@ -118,11 +135,24 @@ BEGIN
     FROM public.mileage_readings
     WHERE work_order_id = NEW.work_order_id
       AND reading_type = 'entry'
+      AND id IS DISTINCT FROM NEW.id
     ORDER BY recorded_at DESC
     LIMIT 1;
 
     IF v_entry_mileage IS NOT NULL AND NEW.mileage < v_entry_mileage THEN
       RAISE EXCEPTION 'Exit mileage cannot be lower than entry mileage for the same work order.';
+    END IF;
+  ELSIF NEW.reading_type = 'entry' THEN
+    SELECT mileage INTO v_entry_mileage
+    FROM public.mileage_readings
+    WHERE work_order_id = NEW.work_order_id
+      AND reading_type = 'exit'
+      AND id IS DISTINCT FROM NEW.id
+    ORDER BY recorded_at DESC
+    LIMIT 1;
+
+    IF v_entry_mileage IS NOT NULL AND NEW.mileage > v_entry_mileage THEN
+      RAISE EXCEPTION 'Entry mileage cannot be higher than exit mileage for the same work order.';
     END IF;
   END IF;
 
