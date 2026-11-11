@@ -184,6 +184,7 @@
     syncLanguageShell();
     $('#garage-label').textContent=garageName+' · Synchronisé en ligne';
     await loadRecords();
+    if(isAdmin()) await ensureChecklist();
     render();
   }
 
@@ -311,7 +312,7 @@
     let html='';
     if(kind==='new') {
       html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Nouveau dossier véhicule</h2><button class="icon-btn" type="button" data-action="close">×</button></div><div class="form-grid">'+
-      '<label>Nom du client<input name="clientName" required maxlength="100"></label><label>Téléphone<input name="phone" type="tel" maxlength="40"></label><label>Marque<input name="brand" required maxlength="60"></label><label>Modèle<input name="model" required maxlength="60"></label><label>Immatriculation<input name="plate" required maxlength="30"></label><label>Date prévue<input name="plannedDate" type="date"></label><label class="full">Travail demandé<textarea name="workRequested" rows="3" maxlength="1500"></textarea></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le dossier</button></div></form></dialog>';
+      '<label>Nom du client<input name="clientName" required maxlength="100"></label><label>Téléphone<input name="phone" type="tel" maxlength="40"></label><label>E-mail client<input name="email" type="email" maxlength="200"></label><label>Marque<input name="brand" required maxlength="60"></label><label>Modèle<input name="model" required maxlength="60"></label><label>Immatriculation<input name="plate" required maxlength="30"></label><label>Date prévue<input name="plannedDate" type="date"></label><label class="full">Travail demandé<textarea name="workRequested" rows="3" maxlength="1500"></textarea></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le dossier</button></div></form></dialog>';
     } else if(kind==='edit' && v) {
       html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Modifier le dossier</h2><button class="icon-btn" type="button" data-action="close">×</button></div><input type="hidden" name="id" value="'+esc(v.id)+'"><div class="form-grid"><label class="full">Travail effectué / notes<textarea name="workDone" rows="4">'+esc(v.workDone)+'</textarea></label><label class="full">Tâches / opérations réalisées (une par ligne)<textarea name="tasks" rows="4">'+esc(v.tasks.join('\n'))+'</textarea></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer</button></div></form></dialog>';
     } else if(kind==='quote' && v) {
@@ -337,7 +338,7 @@
     const name=String(d.get('clientName')).trim().split(/\s+/);
     const first=name.shift()||'Client', last=name.join(' ');
     const {data:c,error:ce}=await client.from('clients').insert({
-      garage_id:garageId,first_name:first,last_name:last||null,phone:String(d.get('phone')||'').trim()||null
+      garage_id:garageId,first_name:first,last_name:last||null,phone:String(d.get('phone')||'').trim()||null,email:String(d.get('email')||'').trim()||null
     }).select().single();
     if(ce)throw ce;
     const {data:v,error:ve}=await client.from('vehicles').insert({
