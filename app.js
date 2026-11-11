@@ -218,7 +218,16 @@
         const c=clients.find(x=>x.id===v.client_id)||{}, o=orders.find(x=>x.vehicle_id===v.id)||{};
         const name=[c.first_name,c.last_name].filter(Boolean).join(' ')||c.company_name||'Client';
         const noteLines=String(o.conclusion||'').split('\\n');
-        return {id:v.id,clientId:c.id,orderId:o.id,clientName:name,phone:c.phone||'',email:c.email||'',brand:v.brand,model:v.model,plate:v.registration_number,plannedDate:o.planned_start,status:STATUS[o.status]||'À planifier',workRequested:o.description||'',workDone:noteLines[0]||'',tasks:noteLines.slice(1).filter(Boolean),parts:[],quotes:mechanicQuotes.filter(q=>q.vehicle_id===v.id).map(q=>({...q,items:mechanicQuoteItems.filter(it=>it.quote_id===q.id)}))};
+        return {
+          id:v.id,clientId:c.id,orderId:o.id,clientName:name,
+          clientFirstName:c.first_name||'',clientLastName:c.last_name||'',clientCompanyName:c.company_name||'',
+          phone:c.phone||'',email:c.email||'',clientAddress:c.address||'',clientNotes:c.notes||'',
+          brand:v.brand||'',model:v.model||'',plate:v.registration_number||'',vin:v.vin||'',color:v.color||'',
+          year:v.year??'',fuelType:v.fuel_type||'',mileageCurrent:v.mileage_current??0,vehicleNotes:v.notes||'',
+          plannedDate:o.planned_start,status:STATUS[o.status]||'À planifier',workRequested:o.description||'',
+          workDone:noteLines[0]||'',tasks:noteLines.slice(1).filter(Boolean),parts:[],
+          quotes:mechanicQuotes.filter(q=>q.vehicle_id===v.id).map(q=>({...q,items:mechanicQuoteItems.filter(it=>it.quote_id===q.id)}))
+        };
       });
       return;
     }
@@ -252,9 +261,12 @@
       const status=STATUS[o.status]||'À planifier';
       const noteLines=String(o.conclusion||'').split('\\n');
       return {
-        id:v.id, clientId:c.id, orderId:o.id, clientName:name, phone:c.phone||'', email:c.email||'',
-        brand:v.brand, model:v.model, plate:v.registration_number, plannedDate:o.planned_start,
-        status, workRequested:o.description||'', workDone:noteLines[0]||'',
+        id:v.id, clientId:c.id, orderId:o.id, clientName:name,
+        clientFirstName:c.first_name||'', clientLastName:c.last_name||'', clientCompanyName:c.company_name||'',
+        phone:c.phone||'', email:c.email||'', clientAddress:c.address||'', clientNotes:c.notes||'',
+        brand:v.brand||'', model:v.model||'', plate:v.registration_number||'', vin:v.vin||'', color:v.color||'',
+        year:v.year??'', fuelType:v.fuel_type||'', mileageCurrent:v.mileage_current??0, vehicleNotes:v.notes||'',
+        plannedDate:o.planned_start, status, workRequested:o.description||'', workDone:noteLines[0]||'',
         tasks:noteLines.slice(1).filter(Boolean), parts:[], quotes:qs
       };
     });
@@ -322,7 +334,10 @@
       html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Nouveau dossier véhicule</h2><button class="icon-btn" type="button" data-action="close">×</button></div><div class="form-grid">'+
       '<label>Nom du client<input name="clientName" required maxlength="100"></label><label>Téléphone<input name="phone" type="tel" maxlength="40"></label><label>E-mail client<input name="email" type="email" maxlength="200"></label><label>Marque<input name="brand" required maxlength="60"></label><label>Modèle<input name="model" required maxlength="60"></label><label>Immatriculation<input name="plate" required maxlength="30"></label><label>Date prévue<input name="plannedDate" type="date"></label><label class="full">Travail demandé<textarea name="workRequested" rows="3" maxlength="1500"></textarea></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le dossier</button></div></form></dialog>';
     } else if(kind==='edit' && v) {
-      html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Modifier le dossier</h2><button class="icon-btn" type="button" data-action="close">×</button></div><input type="hidden" name="id" value="'+esc(v.id)+'"><div class="form-grid"><label class="full">Travail effectué / notes<textarea name="workDone" rows="4">'+esc(v.workDone)+'</textarea></label><label class="full">Tâches / opérations réalisées (une par ligne)<textarea name="tasks" rows="4">'+esc(v.tasks.join('\n'))+'</textarea></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer</button></div></form></dialog>';
+      html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Modifier le dossier complet</h2><button class="icon-btn" type="button" data-action="close">×</button></div><input type="hidden" name="id" value="'+esc(v.id)+'"><div class="form-grid">'+
+      '<h3 class="full">Coordonnées du client</h3><label>Prénom<input name="clientFirstName" maxlength="100" value="'+esc(v.clientFirstName)+'"></label><label>Nom<input name="clientLastName" maxlength="100" value="'+esc(v.clientLastName)+'"></label><label class="full">Société (si applicable)<input name="clientCompanyName" maxlength="160" value="'+esc(v.clientCompanyName)+'"></label><label>Téléphone<input name="phone" type="tel" maxlength="40" value="'+esc(v.phone)+'"></label><label>E-mail<input name="email" type="email" maxlength="200" value="'+esc(v.email)+'"></label><label class="full">Adresse du client<input name="clientAddress" maxlength="250" value="'+esc(v.clientAddress)+'"></label><label class="full">Notes sur le client<textarea name="clientNotes" rows="2" maxlength="1500">'+esc(v.clientNotes)+'</textarea></label>'+
+      '<h3 class="full">Informations du véhicule</h3><label>Marque<input name="brand" required maxlength="60" value="'+esc(v.brand)+'"></label><label>Modèle<input name="model" required maxlength="60" value="'+esc(v.model)+'"></label><label>Immatriculation<input name="plate" required maxlength="30" value="'+esc(v.plate)+'"></label><label>Numéro de châssis (VIN)<input name="vin" maxlength="40" value="'+esc(v.vin)+'"></label><label>Couleur<input name="color" maxlength="60" value="'+esc(v.color)+'"></label><label>Année<input name="year" type="number" min="1886" max="2100" step="1" value="'+esc(v.year)+'"></label><label>Carburant<input name="fuelType" maxlength="40" value="'+esc(v.fuelType)+'"></label><label>Kilométrage actuel<input name="mileageCurrent" type="number" min="0" step="1" value="'+esc(v.mileageCurrent)+'"></label><label class="full">Notes sur le véhicule<textarea name="vehicleNotes" rows="2" maxlength="1500">'+esc(v.vehicleNotes)+'</textarea></label>'+
+      '<h3 class="full">Intervention et suivi</h3><label class="full">Travail demandé<textarea name="workRequested" rows="3" maxlength="1500">'+esc(v.workRequested)+'</textarea></label><label class="full">Travail effectué / notes<textarea name="workDone" rows="4">'+esc(v.workDone)+'</textarea></label><label class="full">Tâches / opérations réalisées (une par ligne)<textarea name="tasks" rows="4">'+esc(v.tasks.join('\n'))+'</textarea></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer les modifications</button></div></form></dialog>';
     } else if(kind==='quote' && v) {
       html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Créer le devis du véhicule</h2><button class="icon-btn" type="button" data-action="close">×</button></div><input type="hidden" name="id" value="'+esc(v.id)+'"><div class="form-grid"><label class="full">Titre / diagnostic<textarea name="description" required rows="2" placeholder="Ex. Remplacement des plaquettes avant"></textarea></label><label>Pièce / opération 1<input name="item1" maxlength="160" placeholder="Plaquettes de frein"></label><label>Quantité<input name="qty1" type="number" min="0.01" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price1" type="number" min="0" step="0.01" value="0"></label><label>Pièce / opération 2<input name="item2" maxlength="160"></label><label>Quantité<input name="qty2" type="number" min="0.01" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price2" type="number" min="0" step="0.01" value="0"></label><label>Pièce / opération 3<input name="item3" maxlength="160"></label><label>Quantité<input name="qty3" type="number" min="0.01" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price3" type="number" min="0" step="0.01" value="0"></label><label>Heures de main-d’œuvre<input name="labor_hours" type="number" min="0" step="0.25" value="0"></label><label>Taux horaire (€ / h)<input name="labor_rate" type="number" min="0" step="0.01" value="60"></label><p class="muted full">Le total est calculé automatiquement à partir des pièces, opérations et heures de main-d’œuvre.</p></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer et joindre au contrôle</button></div></form></dialog>';
     }
@@ -365,10 +380,42 @@
   }
 
   async function saveEdit(d) {
-    const v=records.find(x=>x.id===d.get('id')); if(!v||!v.orderId)throw new Error('Ordre de travail introuvable.');
-    const conclusion=[String(d.get('workDone')||'').trim(),...String(d.get('tasks')||'').split('\n').map(x=>x.trim()).filter(Boolean)].filter(Boolean).join('\n');
-    const {error}=await client.from('work_orders').update({conclusion}).eq('id',v.orderId).eq('garage_id',garageId);
-    if(error)throw error;
+    const v=records.find(x=>x.id===d.get('id'));
+    if(!v||!v.clientId)throw new Error('Dossier client introuvable.');
+    const firstName=String(d.get('clientFirstName')||'').trim();
+    const lastName=String(d.get('clientLastName')||'').trim();
+    const companyName=String(d.get('clientCompanyName')||'').trim();
+    if(!firstName&&!lastName&&!companyName)throw new Error('Indiquez au moins un nom de client ou une société.');
+    const yearRaw=String(d.get('year')||'').trim();
+    const year=yearRaw?Number(yearRaw):null;
+    if(year!==null&&(!Number.isInteger(year)||year<1886||year>2100))throw new Error('Vérifiez l’année du véhicule.');
+    const mileageRaw=String(d.get('mileageCurrent')||'').trim();
+    const mileageCurrent=mileageRaw?Number(mileageRaw):0;
+    if(!Number.isInteger(mileageCurrent)||mileageCurrent<0)throw new Error('Le kilométrage doit être un nombre entier positif.');
+    const clientPatch={
+      first_name:firstName||null,last_name:lastName||null,company_name:companyName||null,
+      phone:String(d.get('phone')||'').trim()||null,email:String(d.get('email')||'').trim()||null,
+      address:String(d.get('clientAddress')||'').trim()||null,notes:String(d.get('clientNotes')||'').trim()||null
+    };
+    const {error:clientError}=await client.from('clients').update(clientPatch).eq('id',v.clientId).eq('garage_id',garageId);
+    if(clientError)throw clientError;
+    const vehiclePatch={
+      brand:String(d.get('brand')||'').trim(),model:String(d.get('model')||'').trim(),
+      registration_number:String(d.get('plate')||'').trim().toUpperCase(),
+      vin:String(d.get('vin')||'').trim()||null,color:String(d.get('color')||'').trim()||null,
+      year,fuel_type:String(d.get('fuelType')||'').trim()||null,mileage_current:mileageCurrent,
+      notes:String(d.get('vehicleNotes')||'').trim()||null
+    };
+    if(!vehiclePatch.brand||!vehiclePatch.model||!vehiclePatch.registration_number)throw new Error('La marque, le modèle et l’immatriculation sont obligatoires.');
+    const {error:vehicleError}=await client.from('vehicles').update(vehiclePatch).eq('id',v.id).eq('garage_id',garageId);
+    if(vehicleError)throw vehicleError;
+    if(v.orderId){
+      const conclusion=[String(d.get('workDone')||'').trim(),...String(d.get('tasks')||'').split('\n').map(x=>x.trim()).filter(Boolean)].filter(Boolean).join('\n');
+      const {error:orderError}=await client.from('work_orders').update({
+        description:String(d.get('workRequested')||'').trim()||null,conclusion
+      }).eq('id',v.orderId).eq('garage_id',garageId);
+      if(orderError)throw orderError;
+    }
   }
 
   async function addQuote(d) {
