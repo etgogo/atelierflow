@@ -17,6 +17,7 @@
   };
   let user = null, garageId = null, garageName = '', records = [], view = 'dashboard', selectedId = null;
   let signupMode = false;
+  let membershipRole='mechanic', staff=[], appointments=[], appointmentAssignments=[], mechanicProfiles=[];
 
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function money(v) { return new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(Number(v)||0); }
@@ -101,6 +102,7 @@
       return;
     }
     garageId = memberships[0].garage_id;
+    membershipRole = memberships[0].role || 'mechanic';
     const {data:garage,error:garageError} = await client.from('garages').select('name').eq('id',garageId).single();
     if (garageError) throw garageError;
     garageName = garage.name;
@@ -151,10 +153,18 @@
       client.from('clients').select('*').eq('garage_id',garageId).order('created_at',{ascending:false}),
       client.from('vehicles').select('*').eq('garage_id',garageId).order('created_at',{ascending:false}),
       client.from('work_orders').select('*').eq('garage_id',garageId).order('created_at',{ascending:false}),
-      client.from('quotes').select('*').eq('garage_id',garageId).order('created_at',{ascending:false})
+      client.from('quotes').select('*').eq('garage_id',garageId).order('created_at',{ascending:false}),
+      client.from('appointments').select('*').eq('garage_id',garageId).order('starts_at'),
+      client.from('appointment_mechanics').select('*').eq('garage_id',garageId),
+      client.from('mechanic_profiles').select('*').eq('garage_id',garageId),
+      client.from('garage_memberships').select('id,profile_id,role,is_active').eq('garage_id',garageId).eq('is_active',true),
+      client.from('profiles').select('id,full_name,is_active')
     ]);
     for (const r of results) if (r.error) throw r.error;
     const clients=results[0].data||[], vehicles=results[1].data||[], orders=results[2].data||[], quotes=results[3].data||[];
+    appointments=results[4].data||[]; appointmentAssignments=results[5].data||[]; mechanicProfiles=results[6].data||[];
+    const memberships=results[7].data||[], profiles=results[8].data||[];
+    staff=memberships.map(m=>({profileId:m.profile_id,role:m.role,profile:profiles.find(p=>p.id===m.profile_id)||{},mechanic:mechanicProfiles.find(mp=>mp.profile_id===m.profile_id)||null}));
     records=vehicles.map(v=>{
       const c=clients.find(x=>x.id===v.client_id)||{};
       const o=orders.find(x=>x.vehicle_id===v.id)||{};
@@ -185,7 +195,7 @@
       '</tbody></table></div>';
   }
   function render() {
-    const titles={dashboard:'Tableau de bord',vehicles:'Véhicules',orders:'Ordres de travail',quotes:'Devis',planning:'Planning'};
+    const titles={dashboard:'Tableau de bord',vehicles:'Véhicules',orders:'Ordres de travail',quotes:'Devis',planning:'Planning atelier',team:'Équipe & administration'};
     $('#page-title').textContent=titles[view]||titles.dashboard;
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
     if(view==='dashboard') {
@@ -200,10 +210,8 @@
     } else if(view==='quotes') {
       const rows=[];records.forEach(v=>v.quotes.forEach(q=>rows.push({v,q})));
       $('#app').innerHTML='<section class="panel"><div class="panel-heading"><h2>Devis complémentaires</h2></div>'+(rows.length?'<div class="table-wrap"><table><thead><tr><th>Véhicule / client</th><th>Proposition</th><th>Montant</th><th>Décision</th></tr></thead><tbody>'+rows.map(x=>'<tr><td><strong>'+esc(x.v.brand)+' '+esc(x.v.model)+'</strong><small>'+esc(x.v.clientName)+'</small></td><td>'+esc(x.q.description)+'</td><td>'+money(x.q.amount)+'</td><td><select data-action="quote-status" data-id="'+esc(x.q.id)+'"><option value="pending" '+(x.q.decision==='En attente'?'selected':'')+'>En attente</option><option value="accepted" '+(x.q.decision==='Accepté'?'selected':'')+'>Accepté</option><option value="rejected" '+(x.q.decision==='Refusé'?'selected':'')+'>Refusé</option></select></td></tr>').join('')+'</tbody></table></div>':'<p class="empty">Aucun devis enregistré.</p>')+'</section>';
-    } else {
-      const list=records.slice().sort((a,b)=>String(a.plannedDate||'').localeCompare(String(b.plannedDate||'')));
-      $('#app').innerHTML='<section class="panel"><div class="panel-heading"><h2>Planning des entrées</h2><p class="muted">Trié par date prévue</p></div>'+(list.length?'<div class="planning-list">'+list.map(v=>'<article class="planning-item"><div class="planning-date"><strong>'+date(v.plannedDate)+'</strong></div><div class="planning-info"><strong>'+esc(v.brand)+' '+esc(v.model)+' · '+esc(v.plate)+'</strong><span>'+esc(v.clientName)+' · '+esc(v.workRequested)+'</span></div><span class="badge '+statusClass(v.status)+'">'+esc(v.status)+'</span><button class="text-btn" data-action="open" data-id="'+esc(v.id)+'">Ouvrir</button></article>').join('')+'</div>':'<p class="empty">Aucun rendez-vous planifié.</p>')+'</section>';
-    }
+    } else if(view==='planning') { renderWorkshopPlanning(); }
+    else if(view==='team') { renderTeam(); }
   }
   function orderDetail(v) {
     const statusOptions=['À planifier','En cours','En attente client','Prêt à récupérer','Annulé'];
@@ -296,6 +304,69 @@
     window.location.href='sms:'+encodeURIComponent(v.phone)+'?&body='+encodeURIComponent(message);
   }
 
+
+  function isAdmin(){return membershipRole==='admin';}
+  function timeLabel(value){return new Intl.DateTimeFormat('fr-BE',{hour:'2-digit',minute:'2-digit'}).format(new Date(value));}
+  function dateInputValue(d){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');}
+  function renderWorkshopPlanning(){
+    const day=$('#planning-day')?.value||dateInputValue(new Date());
+    const start=new Date(day+'T07:00:00'),end=new Date(day+'T19:00:00');
+    const todays=appointments.filter(a=>new Date(a.starts_at)<end&&new Date(a.ends_at)>start&&a.status!=='cancelled');
+    const hours=Array.from({length:12},(_,i)=>7+i);
+    const people=staff.filter(s=>s.mechanic);
+    const header='<div class="schedule-head"><div class="schedule-name">Équipe</div><div>'+hours.map(h=>'<div class="schedule-hour">'+String(h).padStart(2,'0')+':00</div>').join('')+'</div></div>';
+    const lanes=people.map(person=>{
+      const events=todays.filter(a=>appointmentAssignments.some(x=>x.appointment_id===a.id&&x.mechanic_profile_id===person.mechanic.id)).map(a=>{
+        const s=new Date(a.starts_at),e=new Date(a.ends_at),left=Math.max(0,(s-start)/3600000),right=Math.min(12,(e-start)/3600000);
+        if(right<=left)return '';
+        const colStart=Math.floor(left)+2,colEnd=Math.max(colStart+1,Math.ceil(right)+2);
+        const linked=records.find(v=>v.orderId===a.work_order_id);
+        return '<button class="schedule-event" style="grid-column:'+colStart+' / '+colEnd+'" data-action="appointment" data-id="'+esc(a.id)+'"><b>'+timeLabel(a.starts_at)+'–'+timeLabel(a.ends_at)+'</b><span>'+esc(a.title)+'</span><small>'+esc(linked?(linked.brand+' '+linked.model+' · '+linked.plate):'Intervention atelier')+'</small></button>';
+      }).join('');
+      return '<div class="schedule-lane"><div class="schedule-person"><b>'+esc(person.profile.full_name||'Mécanicien')+'</b><small>'+(person.role==='admin'?'Administration':'Mécanicien')+'</small></div><div class="schedule-track">'+hours.map(()=>'<div class="schedule-cell"></div>').join('')+events+'</div></div>';
+    }).join('');
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Planning de l’atelier</h2><p class="muted">Une ligne par membre de l’équipe · créneaux positionnés par heure</p></div><div class="schedule-actions"><input id="planning-day" type="date" value="'+day+'">'+(isAdmin()?'<button class="primary-btn" data-action="new-appointment">+ Planifier un travail</button>':'')+'</div></div><div class="schedule-scroll">'+header+(lanes||'<p class="empty">Aucun profil mécanicien n’est configuré. Ajoutez les profils depuis Équipe & administration.</p>')+'</div></section>';
+  }
+  function renderTeam(){
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Équipe de l’atelier</h2><p class="muted">Comptes rattachés à cet atelier et profils du planning.</p></div></div><div class="team-list">'+staff.map(s=>'<article class="team-row"><div><b>'+esc(s.profile.full_name||'Compte sans nom')+'</b><small>'+(s.role==='admin'?'Administrateur':'Mécanicien')+(s.profile.is_active===false?' · Inactif':'')+'</small></div><div>'+(s.mechanic?'<span class="badge green">Dans le planning</span>':(isAdmin()?'<button class="secondary-btn" data-action="add-mechanic" data-id="'+esc(s.profileId)+'">Ajouter au planning</button>':'<span class="muted">Non configuré</span>'))+'</div></article>').join('')+'</div>'+(isAdmin()?'<p class="muted team-help">Pour ajouter un nouveau garagiste, son compte doit d’abord être créé et rattaché à ce garage. L’invitation sécurisée par e-mail sera ajoutée dans une étape dédiée.</p>':'')+'</section>';
+  }
+  async function addMechanic(profileId){
+    if(!isAdmin())throw new Error('Réservé à l’administrateur.');
+    const {error}=await client.from('mechanic_profiles').insert({garage_id:garageId,profile_id:profileId});
+    if(error)throw error;await loadRecords();render();
+  }
+  function openAppointmentForm(){
+    if(!isAdmin())return;
+    const options=records.filter(v=>v.orderId).map(v=>'<option value="'+esc(v.orderId)+'">'+esc(v.brand+' '+v.model+' · '+v.plate+' — '+v.clientName)+'</option>').join('');
+    const mechanics=staff.filter(s=>s.mechanic).map(s=>'<option value="'+esc(s.mechanic.id)+'">'+esc(s.profile.full_name||'Mécanicien')+'</option>').join('');
+    if(!mechanics){alert('Ajoutez d’abord les profils des mécaniciens dans Équipe & administration.');return;}
+    const d=new Date();d.setMinutes(0,0,0);d.setHours(Math.max(7,Math.min(17,d.getHours()+1)));
+    const finish=new Date(d.getTime()+3600000);
+    const start=dateInputValue(d)+'T'+String(d.getHours()).padStart(2,'0')+':00';
+    const end=dateInputValue(finish)+'T'+String(finish.getHours()).padStart(2,'0')+':00';
+    showAppointmentDialog('<h2>Planifier une intervention</h2><div class="form-grid"><label class="full">Travail / intervention<input name="title" required maxlength="160" placeholder="Ex. Remplacement des freins"></label><label class="full">Dossier véhicule<select name="work_order_id"><option value="">Intervention sans dossier lié</option>'+options+'</select></label><label>Mécanicien<select name="mechanic_id" required>'+mechanics+'</select></label><label>Début<input type="datetime-local" name="starts_at" value="'+start+'" required></label><label>Fin<input type="datetime-local" name="ends_at" value="'+end+'" required></label><label class="full">Notes<textarea name="notes" rows="2"></textarea></label></div>');
+  }
+  function showAppointmentDialog(fields){
+    const old=$('#data-dialog');if(old)old.remove();
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><form id="data-form"><div class="dialog-head">'+fields+'<button class="icon-btn" type="button" data-action="close">×</button></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le créneau</button></div></form></dialog>');
+    const dlg=$('#data-dialog');dlg.showModal();
+    $('#data-form').addEventListener('submit',async ev=>{
+      ev.preventDefault();const f=ev.currentTarget,d=new FormData(f),btn=f.querySelector('[type=submit]');btn.disabled=true;
+      try{await saveAppointment(d);dlg.close();dlg.remove();await loadRecords();render();}
+      catch(err){alert('Enregistrement impossible : '+errorMessage(err));btn.disabled=false;}
+    });
+  }
+  async function saveAppointment(d){
+    const starts=new Date(d.get('starts_at')),ends=new Date(d.get('ends_at'));
+    if(!(ends>starts))throw new Error('L’heure de fin doit être après l’heure de début.');
+    const {data:a,error}=await client.from('appointments').insert({garage_id:garageId,work_order_id:String(d.get('work_order_id')||'')||null,title:String(d.get('title')).trim(),starts_at:starts.toISOString(),ends_at:ends.toISOString(),notes:String(d.get('notes')||'').trim()||null,created_by:user.id}).select().single();
+    if(error)throw error;
+    const {error:ae}=await client.from('appointment_mechanics').insert({garage_id:garageId,appointment_id:a.id,mechanic_profile_id:String(d.get('mechanic_id'))});
+    if(ae){await client.from('appointments').delete().eq('id',a.id);throw ae;}
+  }
+  document.addEventListener('change',ev=>{if(ev.target.id==='planning-day')renderWorkshopPlanning();});
+
+  /* WORKSHOP_PLANNING_MODULE */
   document.addEventListener('click',async ev=>{
     const nav=ev.target.closest('[data-view]');
     if(nav){view=nav.dataset.view;render();return;}
@@ -310,6 +381,9 @@
     if(action==='close'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}}
     if(action==='status')return;
     if(action==='ready'){const v=records.find(x=>x.id===id);if(v&&confirm('Préparer un SMS indiquant que le véhicule est prêt ?'))sms(v);}
+    if(action==='new-appointment')openAppointmentForm();
+    if(action==='add-mechanic')addMechanic(id).catch(err=>alert(errorMessage(err)));
+    if(action==='appointment'){const a=appointments.find(x=>x.id===id);if(a)alert(a.title+' | '+timeLabel(a.starts_at)+' – '+timeLabel(a.ends_at)+' | '+(a.notes||'Aucune note'));}
   });
   document.addEventListener('change',async ev=>{
     const el=ev.target;
