@@ -7,7 +7,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
-AS $
+AS $$
   SELECT auth.uid();
 $$;
 
@@ -17,7 +17,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
-AS $
+AS $$
   SELECT gm.garage_id
   FROM public.garage_memberships gm
   WHERE gm.profile_id = public.current_profile_id()
@@ -30,7 +30,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
-AS $
+AS $$
   SELECT EXISTS (
     SELECT 1
     FROM public.garage_memberships gm
@@ -46,7 +46,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
-AS $
+AS $$
   SELECT EXISTS (
     SELECT 1
     FROM public.garage_memberships gm
@@ -63,7 +63,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
-AS $
+AS $$
   SELECT COALESCE(
     (
       EXISTS (
@@ -87,7 +87,7 @@ LANGUAGE sql
 STABLE
 SECURITY DEFINER
 SET search_path = pg_catalog, public
-AS $
+AS $$
   SELECT EXISTS (
     SELECT 1
     FROM public.work_orders wo
@@ -145,7 +145,7 @@ CREATE OR REPLACE FUNCTION public.prevent_profile_security_field_changes()
 RETURNS TRIGGER
 LANGUAGE plpgsql
 SET search_path = pg_catalog, public
-AS $
+AS $$
 BEGIN
   IF NEW.id IS DISTINCT FROM OLD.id
      OR NEW.is_active IS DISTINCT FROM OLD.is_active THEN
@@ -153,7 +153,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$$;
 
 DROP TRIGGER IF EXISTS profiles_protect_security_fields ON public.profiles;
 CREATE TRIGGER profiles_protect_security_fields
