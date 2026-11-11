@@ -16,7 +16,7 @@ These scripts create the database schema, access-control layer, and PostgreSQL b
 
 - garage and membership management, including a one-time first-garage bootstrap RPC
 - explicit authenticated-role SQL grants with RLS remaining the access-control boundary
-- database guards that reject cross-garage links between clients, vehicles, work orders, appointments, mechanics, inspections, parts and related records
+- database guards that reject cross-garage links between clients, vehicles, work orders, appointments, mechanics, inspections, parts and related records, and prevent records from being moved between garages
 - roles and permissions
 - client and vehicle records
 - work orders and appointments
