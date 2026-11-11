@@ -33,12 +33,12 @@
     <div id="auth-message" class="notice" hidden></div>
     <form id="auth-form">
       <label>Adresse e-mail<input name="email" type="email" autocomplete="email" required></label>
-      <label>Mot de passe<input name="password" type="password" autocomplete="current-password" minlength="8" required></label>
+      <label id="password-field">Mot de passe<input name="password" type="password" autocomplete="current-password" minlength="8" required></label>
       <label id="remember-field" class="remember-option"><input name="remember_session" type="checkbox" checked> Rester connecté sur cet appareil</label>
       <label id="name-field" hidden>Nom complet<input name="full_name" autocomplete="name"></label>
       <div class="auth-actions">
         <button class="primary-btn" type="submit" id="auth-submit">Se connecter</button>
-        <button class="secondary-btn" type="button" id="toggle-signup">Créer un compte</button>
+        <button class="secondary-btn" type="button" id="toggle-signup">Demander un accès</button>
       </div>
     </form>
     <section id="password-setup-panel" hidden>
