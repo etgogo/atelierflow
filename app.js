@@ -202,19 +202,22 @@
         client.from('mechanic_profiles').select('*').eq('garage_id',garageId),
         client.from('garage_memberships').select('id,profile_id,role,is_active').eq('garage_id',garageId),
         client.from('profiles').select('id,full_name,is_active'),
-        client.from('inspections').select('*').eq('garage_id',garageId).order('created_at',{ascending:false})
+        client.from('inspections').select('*').eq('garage_id',garageId).order('created_at',{ascending:false}),
+        client.from('quotes').select('*').eq('garage_id',garageId).order('created_at',{ascending:false})
       ]);
       for (const r of results) if (r.error) throw r.error;
       const clients=results[0].data||[], vehicles=results[1].data||[], orders=results[2].data||[];
       appointments=results[3].data||[]; appointmentAssignments=results[4].data||[]; mechanicProfiles=results[5].data||[];
       const memberships=results[6].data||[], profiles=results[7].data||[];
       inspections=results[8].data||[];
+      const mechanicQuotes=results[9].data||[];
+      const mechanicQuoteItems=mechanicQuotes.length?(await client.from('quote_items').select('*').in('quote_id',mechanicQuotes.map(q=>q.id))).data||[]:[];
       staff=memberships.map(m=>({profileId:m.profile_id,role:m.role,is_active:m.is_active,profile:profiles.find(p=>p.id===m.profile_id)||{},mechanic:mechanicProfiles.find(mp=>mp.profile_id===m.profile_id)||null}));
       records=vehicles.map(v=>{
         const c=clients.find(x=>x.id===v.client_id)||{}, o=orders.find(x=>x.vehicle_id===v.id)||{};
         const name=[c.first_name,c.last_name].filter(Boolean).join(' ')||c.company_name||'Client';
         const noteLines=String(o.conclusion||'').split('\\n');
-        return {id:v.id,clientId:c.id,orderId:o.id,clientName:name,phone:c.phone||'',email:c.email||'',brand:v.brand,model:v.model,plate:v.registration_number,plannedDate:o.planned_start,status:STATUS[o.status]||'À planifier',workRequested:o.description||'',workDone:noteLines[0]||'',tasks:noteLines.slice(1).filter(Boolean),parts:[],quotes:[]};
+        return {id:v.id,clientId:c.id,orderId:o.id,clientName:name,phone:c.phone||'',email:c.email||'',brand:v.brand,model:v.model,plate:v.registration_number,plannedDate:o.planned_start,status:STATUS[o.status]||'À planifier',workRequested:o.description||'',workDone:noteLines[0]||'',tasks:noteLines.slice(1).filter(Boolean),parts:[],quotes:mechanicQuotes.filter(q=>q.vehicle_id===v.id).map(q=>({...q,items:mechanicQuoteItems.filter(it=>it.quote_id===q.id)}))};
       });
       return;
     }
@@ -228,11 +231,12 @@
       client.from('mechanic_profiles').select('*').eq('garage_id',garageId),
       client.from('garage_memberships').select('id,profile_id,role,is_active').eq('garage_id',garageId).eq('is_active',true),
       client.from('profiles').select('id,full_name,is_active'),
-      client.from('inspections').select('*').eq('garage_id',garageId).order('created_at',{ascending:false})
+      client.from('inspections').select('*').eq('garage_id',garageId).order('created_at',{ascending:false}),
+      client.from('quote_items').select('*')
     ]);
     for (const r of results) if (r.error) throw r.error;
     const clients=results[0].data||[], vehicles=results[1].data||[], orders=results[2].data||[], quotes=results[3].data||[];
-    appointments=results[4].data||[]; appointmentAssignments=results[5].data||[]; mechanicProfiles=results[6].data||[]; inspections=results[9].data||[];
+    appointments=results[4].data||[]; appointmentAssignments=results[5].data||[]; mechanicProfiles=results[6].data||[]; inspections=results[9].data||[]; const quoteItems=results[10].data||[];
     const memberships=results[7].data||[], profiles=results[8].data||[];
     staff=memberships.map(m=>({profileId:m.profile_id,role:m.role,profile:profiles.find(p=>p.id===m.profile_id)||{},mechanic:mechanicProfiles.find(mp=>mp.profile_id===m.profile_id)||null}));
     records=vehicles.map(v=>{
@@ -241,7 +245,7 @@
       const qs=quotes.filter(q=>q.vehicle_id===v.id).map(q=>({
         id:q.id, description:q.title, amount:q.amount,
         decision:({pending:'En attente',accepted:'Accepté',rejected:'Refusé',expired:'Expiré'})[q.status]||'En attente',
-        createdAt:q.created_at
+        createdAt:q.created_at, items:quoteItems.filter(it=>it.quote_id===q.id)
       }));
       const name=[c.first_name,c.last_name].filter(Boolean).join(' ')||c.company_name||'Client';
       const status=STATUS[o.status]||'À planifier';
@@ -293,7 +297,8 @@
     const pending=inspections.filter(i=>i.status==='submitted');
     const rows=pending.map(i=>{
       const v=records.find(x=>x.orderId===i.work_order_id);if(!v)return '';
-      return '<article class="team-row"><div><b>'+esc(v.brand+' '+v.model)+' · '+esc(v.plate)+'</b><small>'+esc(v.clientName)+' · Contrôle transmis le '+date(i.updated_at||i.created_at)+'</small></div><div class="team-actions"><button class="secondary-btn" data-action="review-inspection" data-work-order-id="'+esc(i.work_order_id)+'">Voir le contrôle</button><button class="secondary-btn" data-action="message-client" data-id="'+esc(v.id)+'">Envoyer le message client</button><button class="primary-btn" data-action="archive-vehicle" data-id="'+esc(v.id)+'">Confirmer remise & archiver</button></div></article>';
+      const quoteHtml=v.quotes.length?v.quotes.map(q=>'<div class="detail-block"><b>Devis '+esc(q.quote_number||'')+' — '+esc(q.title)+'</b><p>'+q.items.map(it=>esc(it.description)+' · '+esc(it.quantity)+' × '+money(it.unit_price)+' = '+money(it.total_price)).join('<br>')+'</p><strong>Total : '+money(q.amount)+'</strong></div>').join(''):'<p class="muted">Aucun devis joint à ce dossier.</p>';
+      return '<article class="team-row"><div><b>'+esc(v.brand+' '+v.model)+' · '+esc(v.plate)+'</b><small>'+esc(v.clientName)+' · Contrôle transmis le '+date(i.updated_at||i.created_at)+'</small></div><div>'+quoteHtml+'</div><div class="team-actions"><button class="secondary-btn" data-action="review-inspection" data-work-order-id="'+esc(i.work_order_id)+'">Voir le contrôle</button><button class="primary-btn" data-action="open-client-message" data-id="'+esc(v.id)+'">Préparer SMS / e-mail et archiver</button></div></article>';
     }).join('');
     $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Véhicules transmis par les mécaniciens</h2><p class="muted">Vérifiez le contrôle, contactez le client, puis archivez le dossier.</p></div></div>'+(rows||'<p class="empty">Aucun véhicule en attente de remise.</p>')+'</section>';
   }
@@ -318,7 +323,7 @@
     } else if(kind==='edit' && v) {
       html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Modifier le dossier</h2><button class="icon-btn" type="button" data-action="close">×</button></div><input type="hidden" name="id" value="'+esc(v.id)+'"><div class="form-grid"><label class="full">Travail effectué / notes<textarea name="workDone" rows="4">'+esc(v.workDone)+'</textarea></label><label class="full">Tâches / opérations réalisées (une par ligne)<textarea name="tasks" rows="4">'+esc(v.tasks.join('\n'))+'</textarea></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer</button></div></form></dialog>';
     } else if(kind==='quote' && v) {
-      html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Ajouter un devis complémentaire</h2><button class="icon-btn" type="button" data-action="close">×</button></div><input type="hidden" name="id" value="'+esc(v.id)+'"><div class="form-grid"><label class="full">Anomalie et proposition<textarea name="description" required rows="3"></textarea></label><label>Montant estimé (€)<input name="amount" type="number" min="0" step="0.01" required></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer le devis</button></div></form></dialog>';
+      html='<dialog id="data-dialog"><form id="data-form"><div class="dialog-head"><h2>Créer le devis du véhicule</h2><button class="icon-btn" type="button" data-action="close">×</button></div><input type="hidden" name="id" value="'+esc(v.id)+'"><div class="form-grid"><label class="full">Titre / diagnostic<textarea name="description" required rows="2" placeholder="Ex. Remplacement des plaquettes avant"></textarea></label><label>Pièce / opération 1<input name="item1" maxlength="160" placeholder="Plaquettes de frein"></label><label>Quantité<input name="qty1" type="number" min="0.01" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price1" type="number" min="0" step="0.01" value="0"></label><label>Pièce / opération 2<input name="item2" maxlength="160"></label><label>Quantité<input name="qty2" type="number" min="0.01" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price2" type="number" min="0" step="0.01" value="0"></label><label>Pièce / opération 3<input name="item3" maxlength="160"></label><label>Quantité<input name="qty3" type="number" min="0.01" step="0.01" value="1"></label><label>Prix unitaire (€)<input name="price3" type="number" min="0" step="0.01" value="0"></label><label>Heures de main-d’œuvre<input name="labor_hours" type="number" min="0" step="0.25" value="0"></label><label>Taux horaire (€ / h)<input name="labor_rate" type="number" min="0" step="0.01" value="60"></label><p class="muted full">Le total est calculé automatiquement à partir des pièces, opérations et heures de main-d’œuvre.</p></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Enregistrer et joindre au contrôle</button></div></form></dialog>';
     }
     if(!html)return;
     const old=$('#data-dialog'); if(old)old.remove();
@@ -367,14 +372,24 @@
 
   async function addQuote(d) {
     const v=records.find(x=>x.id===d.get('id')); if(!v||!v.orderId)throw new Error('Ordre de travail introuvable.');
-    const {error}=await client.from('quotes').insert({
-      garage_id:garageId,work_order_id:v.orderId,vehicle_id:v.id,
-      quote_number:'AF-'+Date.now(),title:String(d.get('description')).trim(),
-      amount:Number(d.get('amount')),status:'pending',created_by:user.id
-    });
+    const items=[];
+    for(let n=1;n<=3;n++){
+      const description=String(d.get('item'+n)||'').trim();
+      if(!description)continue;
+      const quantity=Number(d.get('qty'+n)||1),unitPrice=Number(d.get('price'+n)||0);
+      if(!(quantity>0)||unitPrice<0)throw new Error('Vérifiez les quantités et les prix des pièces.');
+      items.push({description,quantity,unit_price:unitPrice,total_price:quantity*unitPrice});
+    }
+    const hours=Number(d.get('labor_hours')||0),rate=Number(d.get('labor_rate')||0);
+    if(hours<0||rate<0)throw new Error('La main-d’œuvre doit avoir des valeurs positives.');
+    if(hours>0)items.push({description:'Main-d’œuvre ('+hours+' h)',quantity:hours,unit_price:rate,total_price:hours*rate});
+    if(!items.length)throw new Error('Ajoutez au moins une pièce ou une ligne de main-d’œuvre.');
+    const amount=items.reduce((sum,it)=>sum+it.total_price,0);
+    const {data:q,error}=await client.from('quotes').insert({garage_id:garageId,work_order_id:v.orderId,vehicle_id:v.id,quote_number:'AF-'+Date.now(),title:String(d.get('description')).trim(),amount,status:'pending',created_by:user.id}).select().single();
     if(error)throw error;
-    const {error:statusError}=await client.from('work_orders').update({status:'awaiting_customer'}).eq('id',v.orderId);
-    if(statusError)throw statusError;
+    const payload=items.map(it=>({quote_id:q.id,...it}));
+    const {error:itemError}=await client.from('quote_items').insert(payload);
+    if(itemError){await client.from('quotes').delete().eq('id',q.id);throw itemError;}
   }
 
   async function changeStatus(id,label) {
@@ -386,11 +401,44 @@
     await loadRecords(); render();
   }
 
-  function sms(v) {
-    if(!v.phone&&!v.email){alert('Aucun téléphone ou e-mail enregistré pour ce client.');return;}
-    const message='Bonjour '+v.clientName+', votre '+v.brand+' '+v.model+' ('+v.plate+') est prêt à être récupéré. Vous pouvez venir le chercher. Merci.';
-    if(v.phone)window.location.href='sms:'+encodeURIComponent(v.phone)+'?&body='+encodeURIComponent(message);
-    else window.location.href='mailto:'+encodeURIComponent(v.email)+'?subject='+encodeURIComponent('Votre véhicule est prêt')+'&body='+encodeURIComponent(message);
+  let pendingClientMessage=null;
+  function openClientMessageDialog(vehicleId){
+    if(!isAdmin())return;
+    const v=records.find(x=>x.id===vehicleId);if(!v?.orderId)throw new Error('Dossier introuvable.');
+    if(!v.phone&&!v.email)throw new Error('Ajoutez un numéro de téléphone ou une adresse e-mail au client.');
+    const message='Bonjour '+v.clientName+', le contrôle de votre '+v.brand+' '+v.model+' ('+v.plate+') est terminé. Votre devis est prêt. Contactez-nous pour toute question. Merci.';
+    pendingClientMessage={vehicleId,channel:v.phone?'sms':'email',message,launched:false};
+    const old=$('#data-dialog');if(old)old.remove();
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><div class="dialog-head"><h2>Contacter le client</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Choisissez le moyen de contact et vérifiez le texte. Après l’envoi dans votre application Messages ou Mail, revenez ici et confirmez pour archiver le véhicule.</p><label>Envoyer par<select id="client-message-channel"><option value="sms" '+(v.phone?'':'disabled')+'>SMS'+(v.phone?'':' — numéro absent')+'</option><option value="email" '+(v.phone?'':'selected')+' '+(v.email?'':'disabled')+'>E-mail'+(v.email?'':' — adresse absente')+'</option></select></label><label>Message<textarea id="client-message-body" rows="5">'+esc(message)+'</textarea></label><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="button" data-action="launch-client-message">Ouvrir SMS / Mail</button><button class="secondary-btn" type="button" data-action="confirm-client-message" disabled>J’ai envoyé — archiver</button></div></dialog>');
+    $('#data-dialog').showModal();
+  }
+  async function launchClientMessage(){
+    if(!pendingClientMessage)throw new Error('Aucun message en préparation.');
+    const v=records.find(x=>x.id===pendingClientMessage.vehicleId),channel=$('#client-message-channel').value,message=$('#client-message-body').value.trim();
+    if(!message)throw new Error('Le message ne peut pas être vide.');
+    if(channel==='sms'){
+      if(!v.phone)throw new Error('Numéro de téléphone manquant.');
+      window.location.href='sms:'+encodeURIComponent(v.phone)+'&body='+encodeURIComponent(message);
+    }else{
+      if(!v.email)throw new Error('Adresse e-mail manquante.');
+      window.location.href='mailto:'+encodeURIComponent(v.email)+'?subject='+encodeURIComponent('Votre véhicule et votre devis AtelierFlow')+'&body='+encodeURIComponent(message);
+    }
+    pendingClientMessage={...pendingClientMessage,channel,message,launched:true};
+    $('[data-action="confirm-client-message"]').disabled=false;
+  }
+  async function confirmClientMessageAndArchive(){
+    if(!pendingClientMessage?.launched)throw new Error('Ouvrez d’abord votre application SMS ou Mail et envoyez le message.');
+    const {vehicleId,channel,message}=pendingClientMessage,v=records.find(x=>x.id===vehicleId);
+    const inspection=inspections.find(x=>x.work_order_id===v?.orderId&&x.status==='submitted');
+    if(!v?.orderId||!inspection)throw new Error('Le contrôle transmis est introuvable.');
+    const {error:messageError}=await client.from('work_orders').update({customer_message_sent_at:new Date().toISOString(),customer_message_channel:channel,customer_message_content:message}).eq('id',v.orderId).eq('garage_id',garageId);
+    if(messageError)throw messageError;
+    const {error:closeError}=await client.from('work_orders').update({status:'closed'}).eq('id',v.orderId).eq('garage_id',garageId);
+    if(closeError)throw closeError;
+    const {error:inspectionError}=await client.from('inspections').update({status:'archived'}).eq('id',inspection.id).eq('garage_id',garageId);
+    if(inspectionError)throw inspectionError;
+    pendingClientMessage=null;const dlg=$('#data-dialog');if(dlg){dlg.close();dlg.remove();}
+    await loadRecords();view='archives';render();
   }
 
 
@@ -575,7 +623,7 @@
     const done=inspectionResults.filter(r=>r.state==='ok'||r.state==='anomaly'||r.state==='n/a').length;
     const editable=activeInspection.status==='in_progress';
     const adminReview=isAdmin()&&activeInspection.status==='submitted';
-    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour au planning</button></div><p class="muted">Sélectionnez un résultat pour chaque point. Un commentaire est obligatoire uniquement en cas d’anomalie ou de non-conformité.</p><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés · '+(activeInspection.status==='submitted'?'Transmis à l’administration':activeInspection.status==='archived'?'Archivé':'En cours')+'</div>'+sections+'<div class="button-row">'+(activeInspection.status==='in_progress'?'<button class="primary-btn" data-action="finish-inspection">Valider et transmettre à l’administration</button>':activeInspection.status==='completed'?'<span class="muted">Contrôle modifiable — les changements sont enregistrés automatiquement.</span>':adminReview?'<button class="secondary-btn" data-action="message-client" data-id="'+esc(v?.id||'')+'">Envoyer un message au client</button><button class="primary-btn" data-action="archive-vehicle" data-id="'+esc(v?.id||'')+'">Confirmer la remise et archiver</button>':'<span class="muted">Ce contrôle est en lecture seule.</span>')+'</div></section>';
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour au planning</button></div><p class="muted">Sélectionnez un résultat pour chaque point. Un commentaire est obligatoire uniquement en cas d’anomalie ou de non-conformité.</p><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés · '+(activeInspection.status==='submitted'?'Transmis à l’administration':activeInspection.status==='archived'?'Archivé':'En cours')+'</div>'+sections+'<div class="button-row">'+(activeInspection.status==='in_progress'?'<button class="secondary-btn" data-action="add-quote" data-id="'+esc(v?.id||'')+'">Créer / ajouter un devis</button><button class="primary-btn" data-action="finish-inspection">Envoyer à l’administration</button>':activeInspection.status==='completed'?'<span class="muted">Contrôle modifiable — les changements sont enregistrés automatiquement.</span>':adminReview?'<span class="muted">Contrôle reçu par l’administration. Consultez les devis dans le dossier transmis.</span>':'<span class="muted">Ce contrôle est en lecture seule.</span>')+'</div></section>';
   }
   async function saveInspectionResult(itemId,patch){
     if(!['in_progress','completed'].includes(activeInspection?.status))throw new Error('Ce contrôle n’est plus modifiable.');
@@ -644,7 +692,7 @@
     const btn=ev.target.closest('[data-action]');
     if(!btn)return;
     const id=btn.dataset.id, action=btn.dataset.action;
-    if(!isAdmin() && !['appointment','start-inspection','check-result','check-note','inspection-attachment','finish-inspection','back-orders','close'].includes(action)) return;
+    if(!isAdmin() && !['appointment','start-inspection','check-result','check-note','inspection-attachment','finish-inspection','back-orders','close','add-quote'].includes(action)) return;
     if(action==='open'){selectedId=id;view='orders';render();}
     if(action==='edit')openForm('edit',id);
     if(action==='add-quote')openForm('quote',id);
@@ -662,8 +710,10 @@
     if(action==='finish-inspection')submitInspection().catch(err=>alert(errorMessage(err)));
     if(action==='start-inspection'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));}
     if(action==='review-inspection')openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));
-    if(action==='message-client'){if(!isAdmin())return;const v=records.find(x=>x.id===id);if(v)sms(v);}
-    if(action==='archive-vehicle'){if(!isAdmin())return;archiveVehicleByVehicle(id).catch(err=>alert(errorMessage(err)));}
+    if(action==='message-client'){if(!isAdmin())return;openClientMessageDialog(id);}
+    if(action==='open-client-message'){if(!isAdmin())return;openClientMessageDialog(id);}
+    if(action==='launch-client-message')launchClientMessage().catch(err=>alert(errorMessage(err)));
+    if(action==='confirm-client-message')confirmClientMessageAndArchive().catch(err=>alert(errorMessage(err)));
   });
   document.addEventListener('change',async ev=>{
     const el=ev.target;
