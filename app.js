@@ -25,7 +25,7 @@
     'En attente client':'awaiting_customer', 'Prêt à récupérer':'ready_for_pickup',
     'Annulé':'cancelled'
   };
-  let user = null, garageId = null, garageName = '', records = [], view = 'dashboard', selectedId = null;
+  let user = null, garageId = null, garageName = '', garageDetails = {}, records = [], view = 'dashboard', selectedId = null;
   let signupMode = false;
   let inspectionSaveQueue=Promise.resolve(), inspectionAttachmentQueue=Promise.resolve();
   let language = 'fr';
@@ -143,9 +143,10 @@
     }
     garageId = memberships[0].garage_id;
     membershipRole = memberships[0].role || 'mechanic';
-    const {data:garage,error:garageError} = await client.from('garages').select('name').eq('id',garageId).single();
+    const {data:garage,error:garageError} = await client.from('garages').select('*').eq('id',garageId).single();
     if (garageError) throw garageError;
     garageName = garage.name;
+    garageDetails = garage;
     view = membershipRole === 'admin' ? 'dashboard' : 'planning';
     await enterApp();
   }
@@ -421,7 +422,7 @@
       window.location.href='sms:'+encodeURIComponent(v.phone)+'&body='+encodeURIComponent(message);
     }else{
       if(!v.email)throw new Error('Adresse e-mail manquante.');
-      window.location.href='mailto:'+encodeURIComponent(v.email)+'?subject='+encodeURIComponent('Votre véhicule et votre devis AtelierFlow')+'&body='+encodeURIComponent(message);
+      window.location.href='mailto:'+encodeURIComponent(v.email)+'?subject='+encodeURIComponent('Votre véhicule et votre devis '+garageName)+'&body='+encodeURIComponent(message);
     }
     pendingClientMessage={...pendingClientMessage,channel,message,launched:true};
     $('[data-action="confirm-client-message"]').disabled=false;
@@ -468,7 +469,19 @@
   }
 
   function renderSettings(){
-    $('#app').innerHTML='<section class="panel settings-panel"><div class="panel-heading"><div><h2>'+t('settingsTitle')+'</h2><p class="muted">Personnalisez votre espace AtelierFlow.</p></div></div><div class="settings-row"><div><label for="language-setting"><b>'+t('language')+'</b></label><p class="muted">'+t('languageHint')+'</p></div><select id="language-setting" class="settings-select" disabled><option value="fr" selected>Français</option></select></div><p class="muted settings-note">Toute l’interface AtelierFlow est réglée en français. D’autres langues pourront être ajoutées ultérieurement.</p></section><section class="panel settings-panel"><div class="panel-heading"><div><h2>Mon mot de passe</h2><p class="muted">Modifiez votre mot de passe sans vous déconnecter de votre atelier.</p></div></div><form id="change-password-form" class="form-grid"><label class="full">Nouveau mot de passe<input name="password" type="password" minlength="8" autocomplete="new-password" required></label><label class="full">Confirmer le nouveau mot de passe<input name="confirm_password" type="password" minlength="8" autocomplete="new-password" required></label><div id="change-password-message" class="notice full" hidden></div><div class="dialog-actions full"><button class="primary-btn" type="submit">Modifier mon mot de passe</button></div></form></section>';
+    $('#app').innerHTML='<section class="panel settings-panel"><div class="panel-heading"><div><h2>Informations de l’entreprise</h2><p class="muted">Ces informations sont enregistrées pour votre atelier et peuvent être modifiées à tout moment.</p></div></div><form id="garage-settings-form" class="form-grid"><label class="full">Nom de l’entreprise / du garage<input name="name" required maxlength="120" value="'+esc(garageName)+'"></label><label class="full">Adresse<input name="address" maxlength="200" value="'+esc(garageDetails.address||'')+'"></label><label>Code postal<input name="postal_code" maxlength="20" value="'+esc(garageDetails.postal_code||'')+'"></label><label>Ville<input name="city" maxlength="100" value="'+esc(garageDetails.city||'')+'"></label><label>Téléphone professionnel<input name="phone" type="tel" maxlength="40" value="'+esc(garageDetails.phone||'')+'"></label><label>E-mail professionnel<input name="email" type="email" maxlength="200" value="'+esc(garageDetails.email||'')+'"></label><div id="garage-settings-message" class="notice full" hidden></div><div class="dialog-actions full"><button class="primary-btn" type="submit">Enregistrer les informations</button></div></form></section><section class="panel settings-panel"><div class="panel-heading"><div><h2>Mon mot de passe</h2><p class="muted">Modifiez votre mot de passe sans vous déconnecter de votre atelier.</p></div></div><form id="change-password-form" class="form-grid"><label class="full">Nouveau mot de passe<input name="password" type="password" minlength="8" autocomplete="new-password" required></label><label class="full">Confirmer le nouveau mot de passe<input name="confirm_password" type="password" minlength="8" autocomplete="new-password" required></label><div id="change-password-message" class="notice full" hidden></div><div class="dialog-actions full"><button class="primary-btn" type="submit">Modifier mon mot de passe</button></div></form></section>';
+    $('#garage-settings-form').addEventListener('submit',async ev=>{
+      ev.preventDefault();const form=ev.currentTarget,d=new FormData(form),btn=form.querySelector('[type=submit]');
+      const name=String(d.get('name')||'').trim();if(!name){notice('#garage-settings-message','Le nom de l’entreprise est obligatoire.','error');return;}
+      btn.disabled=true;btn.textContent='Enregistrement…';
+      try{
+        const patch={name,address:String(d.get('address')||'').trim()||null,postal_code:String(d.get('postal_code')||'').trim()||null,city:String(d.get('city')||'').trim()||null,phone:String(d.get('phone')||'').trim()||null,email:String(d.get('email')||'').trim()||null};
+        const {data,error}=await client.from('garages').update(patch).eq('id',garageId).select().single();
+        if(error)throw error;garageDetails=data;garageName=data.name;$('#garage-label').textContent=garageName+' · Synchronisé en ligne';
+        notice('#garage-settings-message','Les informations de votre entreprise ont été enregistrées.','success');
+      }catch(err){notice('#garage-settings-message',errorMessage(err),'error');}
+      finally{btn.disabled=false;btn.textContent='Enregistrer les informations';}
+    });
     $('#change-password-form').addEventListener('submit',async ev=>{
       ev.preventDefault();const form=ev.currentTarget,password=form.elements.password.value,confirmation=form.elements.confirm_password.value,btn=form.querySelector('[type=submit]');
       if(password.length<8){notice('#change-password-message','Le mot de passe doit contenir au moins 8 caractères.','error');return;}
@@ -479,7 +492,6 @@
       finally{btn.disabled=false;btn.textContent='Modifier mon mot de passe';}
     });
   }
-
   function renderTeam(){
     const members=staff.filter(s=>s.role==='admin'||s.mechanic);
     $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Équipe de l’atelier</h2><p class="muted">Gérez les membres et leurs accès au planning.</p></div>'+(isAdmin()?'<button class="primary-btn" data-action="open-add-mechanic">+ Ajouter un mécanicien</button>':'')+'</div><div class="team-list">'+(members.length?members.map(s=>{
@@ -541,7 +553,7 @@
     const finish=existing?new Date(existing.ends_at):new Date(d.getTime()+3600000);
     const dt=x=>[dateInputValue(x),String(x.getHours()).padStart(2,'0')+':'+String(x.getMinutes()).padStart(2,'0')].join('T');
     const defaultOrder=existing?.work_order_id||'__new__';
-    showAppointmentDialog('<h2>'+(existing?'Modifier le rendez-vous':'Planifier un véhicule')+'</h2><input type="hidden" name="appointment_id" value="'+esc(existing?.id||'')+'"><div class="form-grid"><label class="full">Travail demandé / intervention<input name="title" required maxlength="1500" value="'+esc(existing?.title||'')+'" placeholder="Ex. Entretien complet, diagnostic moteur, remplacement des freins"></label><label class="full">Dossier véhicule<select name="work_order_id"><option value="__new__" '+(defaultOrder==='__new__'?'selected':'')+'>+ Créer le dossier d’un nouveau véhicule</option><option value="">Intervention sans dossier lié</option>'+options+'</select></label><div id="new-vehicle-fields" class="form-grid full" '+(defaultOrder==='__new__'?'':'hidden')+'><p class="muted full">Le dossier client, le véhicule et l’ordre de travail seront créés automatiquement avec ce rendez-vous.</p><label>Nom du client<input name="clientName" maxlength="100" '+(defaultOrder==='__new__'?'required':'')+'></label><label>Téléphone<input name="phone" type="tel" maxlength="40"></label><label>E-mail client<input name="email" type="email" maxlength="200"></label><label>Marque<input name="brand" maxlength="60" '+(defaultOrder==='__new__'?'required':'')+'></label><label>Modèle<input name="model" maxlength="60" '+(defaultOrder==='__new__'?'required':'')+'></label><label>Immatriculation<input name="plate" maxlength="30" '+(defaultOrder==='__new__'?'required':'')+'></label></div><label>Mécanicien<select name="mechanic_id" required>'+mechanics+'</select></label><label>Début<input type="datetime-local" name="starts_at" value="'+dt(d)+'" required></label><label>Fin<input type="datetime-local" name="ends_at" value="'+dt(finish)+'" required></label><label class="full">Notes du rendez-vous<textarea name="notes" rows="2">'+esc(existing?.notes||'')+'</textarea></label></div>');
+    showAppointmentDialog('<h2>'+(existing?'Modifier le rendez-vous':'Planifier un véhicule')+'</h2><input type="hidden" name="appointment_id" value="'+esc(existing?.id||'')+'"><div class="form-grid"><label class="full">Travail demandé / intervention<input name="title" required maxlength="1500" value="'+esc(existing?.title||'')+'" placeholder="Ex. Entretien complet, diagnostic moteur, remplacement des freins"></label><label class="full">Dossier véhicule (réutilisable pour plusieurs rendez-vous)<select name="work_order_id"><option value="__new__" '+(defaultOrder==='__new__'?'selected':'')+'>+ Créer le dossier d’un nouveau véhicule</option><option value="">Intervention sans dossier lié</option>'+options+'</select></label><div id="new-vehicle-fields" class="form-grid full" '+(defaultOrder==='__new__'?'':'hidden')+'><p class="muted full">Le dossier client, le véhicule et l’ordre de travail seront créés automatiquement avec ce rendez-vous.</p><label>Nom du client<input name="clientName" maxlength="100" '+(defaultOrder==='__new__'?'required':'')+'></label><label>Téléphone<input name="phone" type="tel" maxlength="40"></label><label>E-mail client<input name="email" type="email" maxlength="200"></label><label>Marque<input name="brand" maxlength="60" '+(defaultOrder==='__new__'?'required':'')+'></label><label>Modèle<input name="model" maxlength="60" '+(defaultOrder==='__new__'?'required':'')+'></label><label>Immatriculation<input name="plate" maxlength="30" '+(defaultOrder==='__new__'?'required':'')+'></label></div><label>Mécanicien<select name="mechanic_id" required>'+mechanics+'</select></label><label>Début<input type="datetime-local" name="starts_at" value="'+dt(d)+'" required></label><label>Fin<input type="datetime-local" name="ends_at" value="'+dt(finish)+'" required></label><label class="full">Notes du rendez-vous<textarea name="notes" rows="2">'+esc(existing?.notes||'')+'</textarea></label></div>');
     const orderSelect=$('#data-form [name="work_order_id"]'),newFields=$('#new-vehicle-fields');
     const syncNewFields=()=>{const active=orderSelect.value==='__new__';newFields.hidden=!active;newFields.querySelectorAll('input,textarea').forEach(el=>{el.disabled=!active;el.required=active&&['clientName','brand','model','plate'].includes(el.name);});};
     orderSelect.addEventListener('change',syncNewFields);syncNewFields();
@@ -588,7 +600,7 @@
     const a=appointments.find(x=>x.id===id);if(!a)return;
     if(!confirm('Annuler ce rendez-vous ? Le véhicule et son dossier seront conservés, mais retirés du planning actif.'))return;
     const {error}=await client.from('appointments').update({status:'cancelled'}).eq('id',id).eq('garage_id',garageId);if(error)throw error;
-    if(a.work_order_id){const {error:oe}=await client.from('work_orders').update({status:'cancelled'}).eq('id',a.work_order_id).eq('garage_id',garageId);if(oe)throw oe;}
+    
     await loadRecords();render();
   }
   document.addEventListener('change',ev=>{if(ev.target.id==='planning-day')renderWorkshopPlanning();if(ev.target.id==='planning-day-dashboard')renderWorkshopPlanning('#dashboard-planning',true);if(ev.target.id==='language-setting'){language=ev.target.value;localStorage.setItem('atelierflow-language',language);syncLanguageShell();render();}});
