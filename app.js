@@ -530,16 +530,18 @@
       }
     });
   }
-  function openAppointmentForm(){
+  function openAppointmentForm(appointmentId){
     if(!isAdmin())return;
-    const options=records.filter(v=>v.orderId).map(v=>'<option value="'+esc(v.orderId)+'">'+esc(v.brand+' '+v.model+' · '+v.plate+' — '+v.clientName)+'</option>').join('');
-    const mechanics=staff.filter(s=>s.mechanic).map(s=>'<option value="'+esc(s.mechanic.id)+'">'+esc(s.profile.full_name||'Mécanicien')+'</option>').join('');
+    const existing=appointmentId?appointments.find(a=>a.id===appointmentId):null;
+    if(appointmentId&&!existing)throw new Error('Rendez-vous introuvable.');
+    const options=records.filter(v=>v.orderId).map(v=>'<option value="'+esc(v.orderId)+'" '+(existing?.work_order_id===v.orderId?'selected':'')+'>'+esc(v.brand+' '+v.model+' · '+v.plate+' — '+v.clientName)+'</option>').join('');
+    const mechanics=staff.filter(s=>s.mechanic).map(s=>'<option value="'+esc(s.mechanic.id)+'" '+(appointmentAssignments.some(x=>x.appointment_id===existing?.id&&x.mechanic_profile_id===s.mechanic.id)?'selected':'')+'>'+esc(s.profile.full_name||'Mécanicien')+'</option>').join('');
     if(!mechanics){alert('Ajoutez d’abord les profils des mécaniciens dans Équipe & administration.');return;}
-    const d=new Date();d.setMinutes(0,0,0);d.setHours(Math.max(7,Math.min(17,d.getHours()+1)));
-    const finish=new Date(d.getTime()+3600000);
-    const start=dateInputValue(d)+'T'+String(d.getHours()).padStart(2,'0')+':00';
-    const end=dateInputValue(finish)+'T'+String(finish.getHours()).padStart(2,'0')+':00';
-    showAppointmentDialog('<h2>Planifier une intervention</h2><div class="form-grid"><label class="full">Travail / intervention<input name="title" required maxlength="160" placeholder="Ex. Remplacement des freins"></label><label class="full">Dossier véhicule<select name="work_order_id"><option value="">Intervention sans dossier lié</option>'+options+'</select></label><label>Mécanicien<select name="mechanic_id" required>'+mechanics+'</select></label><label>Début<input type="datetime-local" name="starts_at" value="'+start+'" required></label><label>Fin<input type="datetime-local" name="ends_at" value="'+end+'" required></label><label class="full">Notes<textarea name="notes" rows="2"></textarea></label></div>');
+    const d=existing?new Date(existing.starts_at):new Date();if(!existing){d.setMinutes(0,0,0);d.setHours(Math.max(7,Math.min(17,d.getHours()+1)));}
+    const finish=existing?new Date(existing.ends_at):new Date(d.getTime()+3600000);
+    const dt=x=>[dateInputValue(x),String(x.getHours()).padStart(2,'0')+':'+String(x.getMinutes()).padStart(2,'0')].join('T');
+    showAppointmentDialog('<h2>'+(existing?'Modifier le rendez-vous':'Planifier une intervention')+'</h2><input type="hidden" name="appointment_id" value="'+esc(existing?.id||'')+'"><div class="form-grid"><label class="full">Travail / intervention<input name="title" required maxlength="160" value="'+esc(existing?.title||'')+'" placeholder="Ex. Remplacement des freins"></label><label class="full">Dossier véhicule<select name="work_order_id"><option value="">Intervention sans dossier lié</option>'+options+'</select></label><label>Mécanicien<select name="mechanic_id" required>'+mechanics+'</select></label><label>Début<input type="datetime-local" name="starts_at" value="'+dt(d)+'" required></label><label>Fin<input type="datetime-local" name="ends_at" value="'+dt(finish)+'" required></label><label class="full">Notes<textarea name="notes" rows="2">'+esc(existing?.notes||'')+'</textarea></label></div>');
+    if(existing){const submit=$('#data-form [type=submit]');if(submit)submit.textContent='Enregistrer les modifications';}
   }
   function showAppointmentDialog(fields){
     const old=$('#data-dialog');if(old)old.remove();
@@ -554,10 +556,20 @@
   async function saveAppointment(d){
     const starts=new Date(d.get('starts_at')),ends=new Date(d.get('ends_at'));
     if(!(ends>starts))throw new Error('L’heure de fin doit être après l’heure de début.');
-    const {data:a,error}=await client.from('appointments').insert({garage_id:garageId,work_order_id:String(d.get('work_order_id')||'')||null,title:String(d.get('title')).trim(),starts_at:starts.toISOString(),ends_at:ends.toISOString(),notes:String(d.get('notes')||'').trim()||null,created_by:user.id}).select().single();
-    if(error)throw error;
-    const {error:ae}=await client.from('appointment_mechanics').insert({garage_id:garageId,appointment_id:a.id,mechanic_profile_id:String(d.get('mechanic_id'))});
-    if(ae){await client.from('appointments').delete().eq('id',a.id);throw ae;}
+    const id=String(d.get('appointment_id')||''),payload={work_order_id:String(d.get('work_order_id')||'')||null,title:String(d.get('title')).trim(),starts_at:starts.toISOString(),ends_at:ends.toISOString(),notes:String(d.get('notes')||'').trim()||null};
+    let appointmentId=id;
+    if(id){const {error}=await client.from('appointments').update(payload).eq('id',id).eq('garage_id',garageId);if(error)throw error;const {error:de}=await client.from('appointment_mechanics').delete().eq('appointment_id',id).eq('garage_id',garageId);if(de)throw de;}
+    else{const {data:a,error}=await client.from('appointments').insert({...payload,garage_id:garageId,created_by:user.id}).select().single();if(error)throw error;appointmentId=a.id;}
+    const {error:ae}=await client.from('appointment_mechanics').insert({garage_id:garageId,appointment_id:appointmentId,mechanic_profile_id:String(d.get('mechanic_id'))});
+    if(ae)throw ae;
+  }
+  async function cancelAppointment(id){
+    if(!isAdmin())throw new Error('Seule l’administration peut annuler un rendez-vous.');
+    const a=appointments.find(x=>x.id===id);if(!a)return;
+    if(!confirm('Annuler ce rendez-vous ? Le véhicule et son dossier seront conservés, mais retirés du planning actif.'))return;
+    const {error}=await client.from('appointments').update({status:'cancelled'}).eq('id',id).eq('garage_id',garageId);if(error)throw error;
+    if(a.work_order_id){const {error:oe}=await client.from('work_orders').update({status:'cancelled'}).eq('id',a.work_order_id).eq('garage_id',garageId);if(oe)throw oe;}
+    await loadRecords();render();
   }
   document.addEventListener('change',ev=>{if(ev.target.id==='planning-day')renderWorkshopPlanning();if(ev.target.id==='planning-day-dashboard')renderWorkshopPlanning('#dashboard-planning',true);if(ev.target.id==='language-setting'){language=ev.target.value;localStorage.setItem('atelierflow-language',language);syncLanguageShell();render();}});
 
@@ -668,7 +680,8 @@
     const v=records.find(x=>x.orderId===a.work_order_id);
     const old=$('#data-dialog');if(old)old.remove();
     const action=a.work_order_id?'<button class="primary-btn" type="button" data-action="start-inspection" data-work-order-id="'+esc(a.work_order_id)+'">Commencer la validation du véhicule</button>':'';
-    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><div class="dialog-head"><h2>'+esc(a.title)+'</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">'+timeLabel(a.starts_at)+' – '+timeLabel(a.ends_at)+'</p><p>'+(v?esc(v.brand+' '+v.model+' · '+v.plate+' — '+v.clientName):'Intervention atelier')+'</p><p class="muted">'+esc(a.notes||'Aucune note')+'</p><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Fermer</button>'+action+'</div></dialog>');
+    const adminActions=isAdmin()?'<button class="secondary-btn" type="button" data-action="edit-appointment" data-id="'+esc(a.id)+'">Modifier le rendez-vous</button><button class="secondary-btn" type="button" data-action="cancel-appointment" data-id="'+esc(a.id)+'">Annuler / client absent</button>':'';
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><div class="dialog-head"><h2>'+esc(a.title)+'</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">'+timeLabel(a.starts_at)+' – '+timeLabel(a.ends_at)+'</p><p>'+(v?esc(v.brand+' '+v.model+' · '+v.plate+' — '+v.clientName):'Intervention atelier')+'</p><p class="muted">'+esc(a.notes||'Aucune note')+'</p><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Fermer</button>'+adminActions+action+'</div></dialog>');
     $('#data-dialog').showModal();
   }
   async function archiveVehicleByVehicle(vehicleId){
@@ -700,6 +713,8 @@
     if(action==='status')return;
     if(action==='ready'){if(isAdmin())openClientMessageDialog(id);}
     if(action==='new-appointment')openAppointmentForm();
+    if(action==='edit-appointment'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}openAppointmentForm(id);}
+    if(action==='cancel-appointment'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}cancelAppointment(id).catch(err=>alert(errorMessage(err)));}
     if(action==='open-add-mechanic')openAddMechanicDialog();
     if(action==='edit-mechanic')openEditMechanicDialog(id);
     if(action==='toggle-mechanic'){const active=btn.dataset.active==='true';if(confirm(active?'Suspendre l’accès de ce mécanicien ?':'Réactiver l’accès de ce mécanicien ?'))manageMechanic(id,active?'deactivate':'activate').catch(err=>alert(errorMessage(err)));}
