@@ -262,10 +262,10 @@
       '</tbody></table></div>';
   }
   function render() {
-    document.querySelectorAll('.nav-item').forEach(b=>{ b.hidden = (!isAdmin() && !['dashboard','planning','settings'].includes(b.dataset.view)) || (b.dataset.view==='archives' && !isAdmin()); });
+    document.querySelectorAll('.nav-item').forEach(b=>{ b.hidden = (!isAdmin() && !['dashboard','planning','settings'].includes(b.dataset.view)) || (['archives','handoffs'].includes(b.dataset.view) && !isAdmin()); });
     $('#new-vehicle').hidden = !isAdmin();
     if (!isAdmin() && !['dashboard','planning','settings'].includes(view)) view='planning';
-    const titles={dashboard:t('dashboard'),vehicles:t('vehicles'),orders:t('orders'),quotes:t('quotes'),planning:t('planning'),archives:'Archives',team:t('team'),settings:t('settings')};
+    const titles={dashboard:t('dashboard'),vehicles:t('vehicles'),orders:t('orders'),quotes:t('quotes'),planning:t('planning'),handoffs:'Véhicules à remettre',archives:'Archives',team:t('team'),settings:t('settings')};
     $('#page-title').textContent=titles[view]||titles.dashboard;
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
     if(view==='dashboard') {
@@ -282,8 +282,17 @@
       $('#app').innerHTML='<section class="panel"><div class="panel-heading"><h2>Devis complémentaires</h2></div>'+(rows.length?'<div class="table-wrap"><table><thead><tr><th>Véhicule / client</th><th>Proposition</th><th>Montant</th><th>Décision</th></tr></thead><tbody>'+rows.map(x=>'<tr><td><strong>'+esc(x.v.brand)+' '+esc(x.v.model)+'</strong><small>'+esc(x.v.clientName)+'</small></td><td>'+esc(x.q.description)+'</td><td>'+money(x.q.amount)+'</td><td><select data-action="quote-status" data-id="'+esc(x.q.id)+'"><option value="pending" '+(x.q.decision==='En attente'?'selected':'')+'>En attente</option><option value="accepted" '+(x.q.decision==='Accepté'?'selected':'')+'>Accepté</option><option value="rejected" '+(x.q.decision==='Refusé'?'selected':'')+'>Refusé</option></select></td></tr>').join('')+'</tbody></table></div>':'<p class="empty">Aucun devis enregistré.</p>')+'</section>';
     } else if(view==='planning') { renderWorkshopPlanning(); }
     else if(view==='archives') { renderArchives(); }
+    else if(view==='handoffs') { renderHandoffs(); }
     else if(view==='team') { renderTeam(); }
     else if(view==='settings') { renderSettings(); }
+  }
+  function renderHandoffs(){
+    const pending=inspections.filter(i=>i.status==='submitted');
+    const rows=pending.map(i=>{
+      const v=records.find(x=>x.orderId===i.work_order_id);if(!v)return '';
+      return '<article class="team-row"><div><b>'+esc(v.brand+' '+v.model)+' · '+esc(v.plate)+'</b><small>'+esc(v.clientName)+' · Contrôle transmis le '+date(i.updated_at||i.created_at)+'</small></div><div class="team-actions"><button class="secondary-btn" data-action="review-inspection" data-work-order-id="'+esc(i.work_order_id)+'">Voir le contrôle</button><button class="secondary-btn" data-action="message-client" data-id="'+esc(v.id)+'">Message client</button></div></article>';
+    }).join('');
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Véhicules transmis par les mécaniciens</h2><p class="muted">Vérifiez le contrôle, contactez le client, puis archivez le dossier.</p></div></div>'+(rows||'<p class="empty">Aucun véhicule en attente de remise.</p>')+'</section>';
   }
   function renderArchives(){
     const archived=records.filter(v=>v.status==='Clôturé');
@@ -375,9 +384,10 @@
   }
 
   function sms(v) {
-    if(!v.phone){alert('Aucun numéro de téléphone enregistré.');return;}
+    if(!v.phone&&!v.email){alert('Aucun téléphone ou e-mail enregistré pour ce client.');return;}
     const message='Bonjour '+v.clientName+', votre '+v.brand+' '+v.model+' ('+v.plate+') est prêt à être récupéré. Vous pouvez venir le chercher. Merci.';
-    window.location.href='sms:'+encodeURIComponent(v.phone)+'?&body='+encodeURIComponent(message);
+    if(v.phone)window.location.href='sms:'+encodeURIComponent(v.phone)+'?&body='+encodeURIComponent(message);
+    else window.location.href='mailto:'+encodeURIComponent(v.email)+'?subject='+encodeURIComponent('Votre véhicule est prêt')+'&body='+encodeURIComponent(message);
   }
 
 
@@ -642,7 +652,8 @@
     if(action==='inspection'){const v=records.find(x=>x.id===id);if(v?.orderId)openInspection(v.orderId).catch(err=>alert(errorMessage(err)));}
     if(action==='back-orders'){view='orders';render();}
     if(action==='finish-inspection')submitInspection().catch(err=>alert(errorMessage(err)));
-    if(action==='start-inspection')openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));
+    if(action==='start-inspection'){const dlg=btn.closest('dialog');if(dlg){dlg.close();dlg.remove();}openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));}
+    if(action==='review-inspection')openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));
     if(action==='message-client'){const v=records.find(x=>x.id===id);if(v)sms(v);}
     if(action==='archive-vehicle'){archiveVehicleByVehicle(id).catch(err=>alert(errorMessage(err)));}
   });
