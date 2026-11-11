@@ -189,7 +189,7 @@
       appointmentAssignments=results[1].data||[];
       mechanicProfiles=results[2].data||[];
       const memberships=results[3].data||[], profiles=results[4].data||[];
-      staff=memberships.map(m=>({profileId:m.profile_id,role:m.role,profile:profiles.find(p=>p.id===m.profile_id)||{},mechanic:mechanicProfiles.find(mp=>mp.profile_id===m.profile_id)||null}));
+      staff=memberships.map(m=>({profileId:m.profile_id,role:m.role,is_active:m.is_active,profile:profiles.find(p=>p.id===m.profile_id)||{},mechanic:mechanicProfiles.find(mp=>mp.profile_id===m.profile_id)||null}));
       records=[];
       return;
     }
@@ -362,7 +362,7 @@
     const start=new Date(day+'T07:00:00'),end=new Date(day+'T19:00:00');
     const todays=appointments.filter(a=>new Date(a.starts_at)<end&&new Date(a.ends_at)>start&&a.status!=='cancelled');
     const hours=Array.from({length:12},(_,i)=>7+i);
-    const people=staff.filter(s=>s.mechanic);
+    const people=staff.filter(s=>s.mechanic&&s.is_active!==false);
     const header='<div class="schedule-head"><div class="schedule-name">Équipe</div><div>'+hours.map(h=>'<div class="schedule-hour">'+String(h).padStart(2,'0')+':00</div>').join('')+'</div></div>';
     const lanes=people.map(person=>{
       const events=todays.filter(a=>appointmentAssignments.some(x=>x.appointment_id===a.id&&x.mechanic_profile_id===person.mechanic.id)).map(a=>{
