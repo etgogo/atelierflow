@@ -15,7 +15,9 @@ CREATE OR REPLACE FUNCTION public.current_garage_ids()
 RETURNS TABLE(garage_id UUID)
 LANGUAGE sql
 STABLE
-AS $$
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $
   SELECT gm.garage_id
   FROM public.garage_memberships gm
   WHERE gm.profile_id = public.current_profile_id()
@@ -26,7 +28,9 @@ CREATE OR REPLACE FUNCTION public.is_garage_member(p_garage_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
 STABLE
-AS $$
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $
   SELECT EXISTS (
     SELECT 1
     FROM public.garage_memberships gm
@@ -40,7 +44,9 @@ CREATE OR REPLACE FUNCTION public.is_garage_admin(p_garage_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
 STABLE
-AS $$
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $
   SELECT EXISTS (
     SELECT 1
     FROM public.garage_memberships gm
@@ -55,7 +61,9 @@ CREATE OR REPLACE FUNCTION public.has_permission(p_garage_id UUID, p_permission_
 RETURNS BOOLEAN
 LANGUAGE sql
 STABLE
-AS $$
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $
   SELECT COALESCE(
     (
       EXISTS (
@@ -77,7 +85,9 @@ CREATE OR REPLACE FUNCTION public.can_access_work_order(p_work_order_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
 STABLE
-AS $$
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $
   SELECT EXISTS (
     SELECT 1
     FROM public.work_orders wo
