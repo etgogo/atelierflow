@@ -17,6 +17,14 @@
   };
   let user = null, garageId = null, garageName = '', records = [], view = 'dashboard', selectedId = null;
   let signupMode = false;
+  let language = localStorage.getItem('atelierflow-language') || 'fr';
+  const I18N = {
+    fr:{dashboard:'Tableau de bord',vehicles:'Véhicules',orders:'Ordres de travail',quotes:'Devis',planning:'Planning atelier',team:'Équipe & administration',settings:'Paramètres',active:'Dossiers actifs',ongoing:'En cours',pending:'Devis en attente',ready:'Prêts à récupérer',activity:'Activité atelier',allVehicles:'Tous les véhicules',schedule:'Planning de l’atelier',scheduleHint:'Une ligne par membre de l’équipe · créneaux positionnés par heure',settingsTitle:'Paramètres généraux',language:'Langue de l’interface',languageHint:'Le choix est enregistré sur cet appareil.',save:'Enregistrer les préférences',saved:'Préférences enregistrées.'},
+    nl:{dashboard:'Dashboard',vehicles:'Voertuigen',orders:'Werkorders',quotes:'Offertes',planning:'Werkplaatsplanning',team:'Team & beheer',settings:'Instellingen',active:'Actieve dossiers',ongoing:'In uitvoering',pending:'Openstaande offertes',ready:'Klaar om op te halen',activity:'Werkplaatsactiviteit',allVehicles:'Alle voertuigen',schedule:'Werkplaatsplanning',scheduleHint:'Eén rij per teamlid · tijdsblokken per uur',settingsTitle:'Algemene instellingen',language:'Taal van de interface',languageHint:'Deze keuze wordt op dit apparaat opgeslagen.',save:'Voorkeuren opslaan',saved:'Voorkeuren opgeslagen.'},
+    en:{dashboard:'Dashboard',vehicles:'Vehicles',orders:'Work orders',quotes:'Quotes',planning:'Workshop schedule',team:'Team & administration',settings:'Settings',active:'Active jobs',ongoing:'In progress',pending:'Pending quotes',ready:'Ready for pickup',activity:'Workshop activity',allVehicles:'All vehicles',schedule:'Workshop schedule',scheduleHint:'One row per team member · time slots by hour',settingsTitle:'General settings',language:'Interface language',languageHint:'Your choice is saved on this device.',save:'Save preferences',saved:'Preferences saved.'}
+  };
+  function t(key){return (I18N[language]||I18N.fr)[key]||I18N.fr[key]||key;}
+  function syncLanguageShell(){document.documentElement.lang=language;document.querySelectorAll('.nav-item').forEach(b=>{b.textContent=t(b.dataset.view);});}
   let membershipRole='mechanic', staff=[], appointments=[], appointmentAssignments=[], mechanicProfiles=[], checklistTemplate=null, checklistCategories=[], checklistItems=[], activeInspection=null, inspectionResults=[];
 
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -142,6 +150,7 @@
 
   async function enterApp() {
     showScreen('app');
+    syncLanguageShell();
     $('#garage-label').textContent=garageName+' · Synchronisé en ligne';
     await loadRecords();
     render();
@@ -195,7 +204,7 @@
       '</tbody></table></div>';
   }
   function render() {
-    const titles={dashboard:'Tableau de bord',vehicles:'Véhicules',orders:'Ordres de travail',quotes:'Devis',planning:'Planning atelier',team:'Équipe & administration'};
+    const titles={dashboard:t('dashboard'),vehicles:t('vehicles'),orders:t('orders'),quotes:t('quotes'),planning:t('planning'),team:t('team'),settings:t('settings')};
     $('#page-title').textContent=titles[view]||titles.dashboard;
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
     if(view==='dashboard') {
@@ -308,8 +317,9 @@
   function isAdmin(){return membershipRole==='admin';}
   function timeLabel(value){return new Intl.DateTimeFormat('fr-BE',{hour:'2-digit',minute:'2-digit'}).format(new Date(value));}
   function dateInputValue(d){return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-');}
-  function renderWorkshopPlanning(){
-    const day=$('#planning-day')?.value||dateInputValue(new Date());
+  function renderWorkshopPlanning(target='#app',compact=false){
+    const dateId=compact?'planning-day-dashboard':'planning-day';
+    const day=document.getElementById(dateId)?.value||dateInputValue(new Date());
     const start=new Date(day+'T07:00:00'),end=new Date(day+'T19:00:00');
     const todays=appointments.filter(a=>new Date(a.starts_at)<end&&new Date(a.ends_at)>start&&a.status!=='cancelled');
     const hours=Array.from({length:12},(_,i)=>7+i);
@@ -325,8 +335,14 @@
       }).join('');
       return '<div class="schedule-lane"><div class="schedule-person"><b>'+esc(person.profile.full_name||'Mécanicien')+'</b><small>'+(person.role==='admin'?'Administration':'Mécanicien')+'</small></div><div class="schedule-track">'+hours.map(()=>'<div class="schedule-cell"></div>').join('')+events+'</div></div>';
     }).join('');
-    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Planning de l’atelier</h2><p class="muted">Une ligne par membre de l’équipe · créneaux positionnés par heure</p></div><div class="schedule-actions"><input id="planning-day" type="date" value="'+day+'">'+(isAdmin()?'<button class="primary-btn" data-action="new-appointment">+ Planifier un travail</button>':'')+'</div></div><div class="schedule-scroll">'+header+(lanes||'<p class="empty">Aucun profil mécanicien n’est configuré. Ajoutez les profils depuis Équipe & administration.</p>')+'</div></section>';
+    const host=document.querySelector(target);if(!host)return;
+    host.innerHTML='<div class="schedule-actions dashboard-date"><input id="'+dateId+'" type="date" value="'+day+'">'+(isAdmin()?'<button class="primary-btn" data-action="new-appointment">+ Planifier un travail</button>':'')+'</div><div class="schedule-scroll">'+header+(lanes||'<p class="empty">Aucun profil mécanicien n’est configuré. Ajoutez les profils depuis Équipe & administration.</p>')+'</div>';
   }
+
+  function renderSettings(){
+    $('#app').innerHTML='<section class="panel settings-panel"><div class="panel-heading"><div><h2>'+t('settingsTitle')+'</h2><p class="muted">Personnalisez votre espace AtelierFlow.</p></div></div><div class="settings-row"><div><label for="language-setting"><b>'+t('language')+'</b></label><p class="muted">'+t('languageHint')+'</p></div><select id="language-setting" class="settings-select"><option value="fr" '+(language==='fr'?'selected':'')+'>Français</option><option value="nl" '+(language==='nl'?'selected':'')+'>Nederlands</option><option value="en" '+(language==='en'?'selected':'')+'>English</option></select></div><p class="muted settings-note">Les préférences de langue sont conservées sur cet appareil et appliquées aux principales zones de navigation et au tableau de bord. La traduction complète des formulaires et de tous les libellés sera étendue progressivement.</p></section>';
+  }
+
   function renderTeam(){
     $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Équipe de l’atelier</h2><p class="muted">Comptes rattachés à cet atelier et profils du planning.</p></div></div><div class="team-list">'+staff.map(s=>'<article class="team-row"><div><b>'+esc(s.profile.full_name||'Compte sans nom')+'</b><small>'+(s.role==='admin'?'Administrateur':'Mécanicien')+(s.profile.is_active===false?' · Inactif':'')+'</small></div><div>'+(s.mechanic?'<span class="badge green">Dans le planning</span>':(isAdmin()?'<button class="secondary-btn" data-action="add-mechanic" data-id="'+esc(s.profileId)+'">Ajouter au planning</button>':'<span class="muted">Non configuré</span>'))+'</div></article>').join('')+'</div>'+(isAdmin()?'<p class="muted team-help">Pour ajouter un nouveau garagiste, son compte doit d’abord être créé et rattaché à ce garage. L’invitation sécurisée par e-mail sera ajoutée dans une étape dédiée.</p>':'')+'</section>';
   }
@@ -364,7 +380,7 @@
     const {error:ae}=await client.from('appointment_mechanics').insert({garage_id:garageId,appointment_id:a.id,mechanic_profile_id:String(d.get('mechanic_id'))});
     if(ae){await client.from('appointments').delete().eq('id',a.id);throw ae;}
   }
-  document.addEventListener('change',ev=>{if(ev.target.id==='planning-day')renderWorkshopPlanning();});
+  document.addEventListener('change',ev=>{if(ev.target.id==='planning-day')renderWorkshopPlanning();if(ev.target.id==='planning-day-dashboard')renderWorkshopPlanning('#dashboard-planning',true);if(ev.target.id==='language-setting'){language=ev.target.value;localStorage.setItem('atelierflow-language',language);syncLanguageShell();render();}});
 
 
   const DEFAULT_CHECKLIST=[
