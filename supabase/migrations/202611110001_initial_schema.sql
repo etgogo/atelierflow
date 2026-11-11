@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS public.garages (
   postal_code TEXT,
   phone TEXT,
   email TEXT,
-  timezone TEXT NOT NULL DEFAULT 'Europe/Paris',
+  timezone TEXT NOT NULL DEFAULT 'Europe/Brussels',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
