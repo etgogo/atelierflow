@@ -36,7 +36,7 @@
   };
   function t(key){return (I18N[language]||I18N.fr)[key]||I18N.fr[key]||key;}
   function syncLanguageShell(){document.documentElement.lang=language;document.querySelectorAll('.nav-item').forEach(b=>{b.textContent=t(b.dataset.view);});}
-  let membershipRole='mechanic', staff=[], appointments=[], appointmentAssignments=[], mechanicProfiles=[], checklistTemplate=null, checklistCategories=[], checklistItems=[], activeInspection=null, inspectionResults=[];
+  let membershipRole='mechanic', staff=[], appointments=[], appointmentAssignments=[], mechanicProfiles=[], checklistTemplate=null, checklistCategories=[], checklistItems=[], activeInspection=null, inspectionResults=[], inspections=[], inspectionAttachments=[];
 
   function esc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
   function money(v) { return new Intl.NumberFormat('fr-BE',{style:'currency',currency:'EUR'}).format(Number(v)||0); }
@@ -191,19 +191,28 @@
     $('#app').innerHTML='<p class="empty">Synchronisation des données…</p>';
     if (!isAdmin()) {
       const results = await Promise.all([
+        client.from('clients').select('*').eq('garage_id',garageId),
+        client.from('vehicles').select('*').eq('garage_id',garageId).order('created_at',{ascending:false}),
+        client.from('work_orders').select('*').eq('garage_id',garageId).order('created_at',{ascending:false}),
         client.from('appointments').select('*').eq('garage_id',garageId).order('starts_at'),
         client.from('appointment_mechanics').select('*').eq('garage_id',garageId),
         client.from('mechanic_profiles').select('*').eq('garage_id',garageId),
         client.from('garage_memberships').select('id,profile_id,role,is_active').eq('garage_id',garageId),
-        client.from('profiles').select('id,full_name,is_active')
+        client.from('profiles').select('id,full_name,is_active'),
+        client.from('inspections').select('*').eq('garage_id',garageId).order('created_at',{ascending:false})
       ]);
       for (const r of results) if (r.error) throw r.error;
-      appointments=results[0].data||[];
-      appointmentAssignments=results[1].data||[];
-      mechanicProfiles=results[2].data||[];
-      const memberships=results[3].data||[], profiles=results[4].data||[];
+      const clients=results[0].data||[], vehicles=results[1].data||[], orders=results[2].data||[];
+      appointments=results[3].data||[]; appointmentAssignments=results[4].data||[]; mechanicProfiles=results[5].data||[];
+      const memberships=results[6].data||[], profiles=results[7].data||[];
+      inspections=results[8].data||[];
       staff=memberships.map(m=>({profileId:m.profile_id,role:m.role,is_active:m.is_active,profile:profiles.find(p=>p.id===m.profile_id)||{},mechanic:mechanicProfiles.find(mp=>mp.profile_id===m.profile_id)||null}));
-      records=[];
+      records=vehicles.map(v=>{
+        const c=clients.find(x=>x.id===v.client_id)||{}, o=orders.find(x=>x.vehicle_id===v.id)||{};
+        const name=[c.first_name,c.last_name].filter(Boolean).join(' ')||c.company_name||'Client';
+        const noteLines=String(o.conclusion||'').split('\\n');
+        return {id:v.id,clientId:c.id,orderId:o.id,clientName:name,phone:c.phone||'',email:c.email||'',brand:v.brand,model:v.model,plate:v.registration_number,plannedDate:o.planned_start,status:STATUS[o.status]||'À planifier',workRequested:o.description||'',workDone:noteLines[0]||'',tasks:noteLines.slice(1).filter(Boolean),parts:[],quotes:[]};
+      });
       return;
     }
     const results = await Promise.all([
@@ -215,11 +224,12 @@
       client.from('appointment_mechanics').select('*').eq('garage_id',garageId),
       client.from('mechanic_profiles').select('*').eq('garage_id',garageId),
       client.from('garage_memberships').select('id,profile_id,role,is_active').eq('garage_id',garageId).eq('is_active',true),
-      client.from('profiles').select('id,full_name,is_active')
+      client.from('profiles').select('id,full_name,is_active'),
+      client.from('inspections').select('*').eq('garage_id',garageId).order('created_at',{ascending:false})
     ]);
     for (const r of results) if (r.error) throw r.error;
     const clients=results[0].data||[], vehicles=results[1].data||[], orders=results[2].data||[], quotes=results[3].data||[];
-    appointments=results[4].data||[]; appointmentAssignments=results[5].data||[]; mechanicProfiles=results[6].data||[];
+    appointments=results[4].data||[]; appointmentAssignments=results[5].data||[]; mechanicProfiles=results[6].data||[]; inspections=results[9].data||[];
     const memberships=results[7].data||[], profiles=results[8].data||[];
     staff=memberships.map(m=>({profileId:m.profile_id,role:m.role,profile:profiles.find(p=>p.id===m.profile_id)||{},mechanic:mechanicProfiles.find(mp=>mp.profile_id===m.profile_id)||null}));
     records=vehicles.map(v=>{
@@ -234,7 +244,7 @@
       const status=STATUS[o.status]||'À planifier';
       const noteLines=String(o.conclusion||'').split('\\n');
       return {
-        id:v.id, clientId:c.id, orderId:o.id, clientName:name, phone:c.phone||'',
+        id:v.id, clientId:c.id, orderId:o.id, clientName:name, phone:c.phone||'', email:c.email||'',
         brand:v.brand, model:v.model, plate:v.registration_number, plannedDate:o.planned_start,
         status, workRequested:o.description||'', workDone:noteLines[0]||'',
         tasks:noteLines.slice(1).filter(Boolean), parts:[], quotes:qs
@@ -252,10 +262,10 @@
       '</tbody></table></div>';
   }
   function render() {
-    document.querySelectorAll('.nav-item').forEach(b=>{ b.hidden = !isAdmin() && !['dashboard','planning','settings'].includes(b.dataset.view); });
+    document.querySelectorAll('.nav-item').forEach(b=>{ b.hidden = (!isAdmin() && !['dashboard','planning','settings'].includes(b.dataset.view)) || (b.dataset.view==='archives' && !isAdmin()); });
     $('#new-vehicle').hidden = !isAdmin();
     if (!isAdmin() && !['dashboard','planning','settings'].includes(view)) view='planning';
-    const titles={dashboard:t('dashboard'),vehicles:t('vehicles'),orders:t('orders'),quotes:t('quotes'),planning:t('planning'),team:t('team'),settings:t('settings')};
+    const titles={dashboard:t('dashboard'),vehicles:t('vehicles'),orders:t('orders'),quotes:t('quotes'),planning:t('planning'),archives:'Archives',team:t('team'),settings:t('settings')};
     $('#page-title').textContent=titles[view]||titles.dashboard;
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
     if(view==='dashboard') {
@@ -271,15 +281,20 @@
       const rows=[];records.forEach(v=>v.quotes.forEach(q=>rows.push({v,q})));
       $('#app').innerHTML='<section class="panel"><div class="panel-heading"><h2>Devis complémentaires</h2></div>'+(rows.length?'<div class="table-wrap"><table><thead><tr><th>Véhicule / client</th><th>Proposition</th><th>Montant</th><th>Décision</th></tr></thead><tbody>'+rows.map(x=>'<tr><td><strong>'+esc(x.v.brand)+' '+esc(x.v.model)+'</strong><small>'+esc(x.v.clientName)+'</small></td><td>'+esc(x.q.description)+'</td><td>'+money(x.q.amount)+'</td><td><select data-action="quote-status" data-id="'+esc(x.q.id)+'"><option value="pending" '+(x.q.decision==='En attente'?'selected':'')+'>En attente</option><option value="accepted" '+(x.q.decision==='Accepté'?'selected':'')+'>Accepté</option><option value="rejected" '+(x.q.decision==='Refusé'?'selected':'')+'>Refusé</option></select></td></tr>').join('')+'</tbody></table></div>':'<p class="empty">Aucun devis enregistré.</p>')+'</section>';
     } else if(view==='planning') { renderWorkshopPlanning(); }
+    else if(view==='archives') { renderArchives(); }
     else if(view==='team') { renderTeam(); }
     else if(view==='settings') { renderSettings(); }
+  }
+  function renderArchives(){
+    const archived=records.filter(v=>v.status==='Clôturé');
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Véhicules archivés</h2><p class="muted">Dossiers terminés et rangés dans les archives.</p></div></div>'+vehicleRows(archived)+'</section>';
   }
   function orderDetail(v) {
     const statusOptions=['À planifier','En cours','En attente client','Prêt à récupérer','Annulé'];
     return '<div class="panel-heading"><div><h2>'+esc(v.brand)+' '+esc(v.model)+'</h2><p class="muted">'+esc(v.clientName)+' · '+esc(v.plate)+'</p></div><button class="secondary-btn" data-action="edit" data-id="'+esc(v.id)+'">Modifier</button></div>'+
       '<div class="detail-block"><b>Travail demandé</b><p>'+esc(v.workRequested||'—')+'</p></div><div class="detail-block"><b>Travail effectué / notes</b><p>'+esc(v.workDone||'À renseigner')+'</p></div>'+
       '<div class="detail-block"><label class="inline-label">Statut <select data-action="status" data-id="'+esc(v.id)+'">'+statusOptions.map(s=>'<option '+(v.status===s?'selected':'')+'>'+s+'</option>').join('')+'</select></label></div>'+
-      '<div class="button-row"><button class="secondary-btn" data-action="edit" data-id="'+esc(v.id)+'">Mettre à jour l’ordre</button><button class="primary-btn" data-action="add-quote" data-id="'+esc(v.id)+'">Ajouter un devis</button><button class="secondary-btn" data-action="inspection" data-id="'+esc(v.id)+'">Contrôle véhicule</button><button class="primary-btn" data-action="ready" data-id="'+esc(v.id)+'">Préparer SMS</button></div>';
+      '<div class="button-row"><button class="secondary-btn" data-action="edit" data-id="'+esc(v.id)+'">Mettre à jour l’ordre</button><button class="primary-btn" data-action="add-quote" data-id="'+esc(v.id)+'">Ajouter un devis</button><button class="secondary-btn" data-action="inspection" data-id="'+esc(v.id)+'">Contrôle véhicule</button><button class="primary-btn" data-action="ready" data-id="'+esc(v.id)+'">Préparer SMS</button>'+(isAdmin()&&v.status==='Prêt à récupérer'?'<button class="secondary-btn" data-action="archive-vehicle" data-id="'+esc(v.id)+'">Archiver le véhicule</button>':'')+'</div>';
   }
 
   function openForm(kind,id) {
@@ -516,16 +531,21 @@
     if(it)throw it;checklistItems=items||[];
   }
   async function openInspection(workOrderId){
+    if(!workOrderId)throw new Error('Aucun ordre de travail lié à ce créneau.');
     await ensureChecklist();
     const {data:ins,error}=await client.from('inspections').select('*').eq('work_order_id',workOrderId).eq('template_id',checklistTemplate.id).order('created_at',{ascending:false}).limit(1);
     if(error)throw error;activeInspection=ins?.[0]||null;
     if(!activeInspection){
-      if(!isAdmin())throw new Error('L’administrateur doit démarrer ce contrôle.');
       const {data:i,error:ie}=await client.from('inspections').insert({garage_id:garageId,work_order_id:workOrderId,template_id:checklistTemplate.id,conducted_by:user.id,status:'in_progress'}).select().single();
-      if(ie)throw ie;activeInspection=i;
+      if(ie)throw ie;activeInspection=i;inspections.unshift(i);
     }
-    const {data:r,error:re}=await client.from('inspection_results').select('*').eq('inspection_id',activeInspection.id);
-    if(re)throw re;inspectionResults=r||[];renderInspection(workOrderId);
+    const [{data:r,error:re},{data:files,error:fe}]=await Promise.all([
+      client.from('inspection_results').select('*').eq('inspection_id',activeInspection.id),
+      client.from('attachments').select('*').eq('work_order_id',workOrderId).eq('garage_id',garageId).order('created_at')
+    ]);
+    if(re)throw re;if(fe)throw fe;inspectionResults=r||[];inspectionAttachments=files||[];
+    for(const file of inspectionAttachments){const {data:signed}=await client.storage.from('inspection-attachments').createSignedUrl(file.storage_path,3600);file.signed_url=signed?.signedUrl||null;}
+    renderInspection(workOrderId);
   }
   function renderInspection(workOrderId){
     const v=records.find(x=>x.orderId===workOrderId);
@@ -533,27 +553,69 @@
       const items=checklistItems.filter(i=>i.category_id===cat.id);
       return '<section class="check-group"><h3>'+esc(cat.name)+'</h3>'+items.map(item=>{
         const result=inspectionResults.find(r=>r.item_id===item.id),state=result?.state||'';
-        return '<div class="check-row"><b>'+esc(item.name)+'</b><select data-action="check-result" data-item="'+esc(item.id)+'" '+(!isAdmin()?'disabled':'')+'><option value="" disabled '+(!state?'selected':'')+'>Choisir le résultat…</option><option value="ok" '+(state==='ok'?'selected':'')+'>Conforme</option><option value="anomaly" '+(state==='anomaly'?'selected':'')+'>Anomalie / non conforme</option><option value="n/a" '+(state==='n/a'?'selected':'')+'>Non applicable</option></select>'+(state==='anomaly'?'<label class="check-note-label">Commentaire obligatoire<input class="check-note" data-action="check-note" data-item="'+esc(item.id)+'" required placeholder="Décrivez le problème constaté" value="'+esc(result?.note||'')+'" '+(!isAdmin()?'disabled':'')+'></label>':'')+'</div>';
+        const editable=activeInspection.status==='in_progress';
+        const files=inspectionAttachments.filter(f=>f.storage_path.includes('/'+item.id+'/'));
+        return '<div class="check-row"><b>'+esc(item.name)+'</b><select data-action="check-result" data-item="'+esc(item.id)+'" '+(!editable?'disabled':'')+'><option value="" disabled '+(!state?'selected':'')+'>Choisir le résultat…</option><option value="ok" '+(state==='ok'?'selected':'')+'>Conforme</option><option value="anomaly" '+(state==='anomaly'?'selected':'')+'>Anomalie / non conforme</option><option value="n/a" '+(state==='n/a'?'selected':'')+'>Non applicable</option></select>'+(state==='anomaly'?'<div class="inspection-anomaly"><label class="check-note-label">Commentaire obligatoire<textarea class="check-note" data-action="check-note" data-item="'+esc(item.id)+'" required placeholder="Décrivez le problème constaté" '+(!editable?'disabled':'')+'>'+esc(result?.note||'')+'</textarea></label>'+(editable?'<label class="attachment-upload">Ajouter une photo ou un document<input type="file" data-action="inspection-attachment" data-item="'+esc(item.id)+'" accept="image/jpeg,image/png,image/webp,application/pdf" multiple></label>':'')+(files.length?'<ul class="attachment-list">'+files.map(f=>'<li>'+(f.signed_url?'<a href="'+esc(f.signed_url)+'" target="_blank" rel="noopener">'+esc(f.file_name)+'</a>':esc(f.file_name))+'</li>').join('')+'</ul>':'')+'</div>':'')+'</div>';
       }).join('')+'</section>';
     }).join('');
     $('#page-title').textContent='Contrôle véhicule';
     const done=inspectionResults.filter(r=>r.state==='ok'||r.state==='anomaly'||r.state==='n/a').length;
-    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour aux ordres</button></div><p class="muted">Sélectionnez un résultat pour chaque point. Un commentaire est obligatoire uniquement en cas d’anomalie ou de non-conformité.</p><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés</div>'+sections+'<div class="button-row">'+(isAdmin()?'<button class="primary-btn" data-action="finish-inspection">Terminer le contrôle</button>':'<span class="muted">Consultation en lecture seule pour ce compte.</span>')+'</div></section>';
+    const editable=activeInspection.status==='in_progress';
+    const adminReview=isAdmin()&&activeInspection.status==='submitted';
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour au planning</button></div><p class="muted">Sélectionnez un résultat pour chaque point. Un commentaire est obligatoire uniquement en cas d’anomalie ou de non-conformité.</p><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés · '+(activeInspection.status==='submitted'?'Transmis à l’administration':activeInspection.status==='archived'?'Archivé':'En cours')+'</div>'+sections+'<div class="button-row">'+(editable?'<button class="primary-btn" data-action="finish-inspection">Rendre le véhicule</button>':adminReview?'<button class="secondary-btn" data-action="message-client" data-id="'+esc(v?.id||'')+'">Envoyer un message au client</button><button class="primary-btn" data-action="archive-vehicle" data-id="'+esc(v?.id||'')+'">Archiver le véhicule</button>':'<span class="muted">Ce contrôle est en lecture seule.</span>')+'</div></section>';
   }
   async function saveInspectionResult(itemId,patch){
-    if(!isAdmin())throw new Error('Les droits actuels autorisent uniquement l’administrateur à modifier les contrôles.');
+    if(activeInspection?.status!=='in_progress')throw new Error('Ce contrôle n’est plus modifiable.');
     const current=inspectionResults.find(r=>r.item_id===itemId);
     const payload={garage_id:garageId,inspection_id:activeInspection.id,item_id:itemId,...(current?{}:{}),...patch};
     const {data,error}=await client.from('inspection_results').upsert(payload,{onConflict:'inspection_id,item_id'}).select().single();
     if(error)throw error;
     const idx=inspectionResults.findIndex(r=>r.item_id===itemId);if(idx>=0)inspectionResults[idx]=data;else inspectionResults.push(data);
   }
-  async function finishInspection(){
-    if(!isAdmin())return;
+  async function submitInspection(){
+    if(activeInspection?.status!=='in_progress')return;
     const missing=checklistItems.filter(i=>{const r=inspectionResults.find(x=>x.item_id===i.id);return !r||!r.state||(r.state==='anomaly'&&!String(r.note||'').trim());});
     if(missing.length){alert('Il reste '+missing.length+' contrôle(s) à compléter ou des anomalies sans commentaire ('+missing.length+').');return;}
-    const {error}=await client.from('inspections').update({status:'completed'}).eq('id',activeInspection.id);
-    if(error)throw error;alert('Contrôle terminé et enregistré.');
+    const {data,error}=await client.from('inspections').update({status:'submitted'}).eq('id',activeInspection.id).eq('garage_id',garageId).select().single();
+    if(error)throw error;activeInspection=data;alert('Véhicule transmis à l’administration.');
+    await loadRecords();if(isAdmin())renderInspection(activeInspection.work_order_id);else{view='planning';render();}
+  }
+
+  async function uploadInspectionAttachments(itemId,fileList){
+    if(activeInspection?.status!=='in_progress')throw new Error('Ce contrôle n’accepte plus de pièces jointes.');
+    const result=inspectionResults.find(r=>r.item_id===itemId);
+    if(result?.state!=='anomaly')throw new Error('Les pièces jointes sont disponibles pour un point signalé en anomalie.');
+    const v=records.find(x=>x.orderId===activeInspection.work_order_id);
+    for(const file of Array.from(fileList)){
+      if(file.size>10*1024*1024)throw new Error('Chaque fichier doit faire 10 Mo maximum.');
+      if(!['image/jpeg','image/png','image/webp','application/pdf'].includes(file.type))throw new Error('Format accepté : JPG, PNG, WEBP ou PDF.');
+      const safeName=file.name.replace(/[^a-zA-Z0-9._-]/g,'_').slice(0,100)||'piece-jointe';
+      const path=garageId+'/'+activeInspection.id+'/'+itemId+'/'+Date.now()+'-'+crypto.randomUUID()+'-'+safeName;
+      const {error:uploadError}=await client.storage.from('inspection-attachments').upload(path,file,{contentType:file.type,upsert:false});
+      if(uploadError)throw uploadError;
+      const {data:row,error}=await client.from('attachments').insert({garage_id:garageId,work_order_id:activeInspection.work_order_id,vehicle_id:v?.id||null,attachment_kind:file.type==='application/pdf'?'document':'photo',file_name:file.name,storage_path:path,mime_type:file.type,created_by:user.id}).select().single();
+      if(error){await client.storage.from('inspection-attachments').remove([path]);throw error;}
+      const {data:signed}=await client.storage.from('inspection-attachments').createSignedUrl(path,3600);
+      row.signed_url=signed?.signedUrl||null;inspectionAttachments.push(row);
+    }
+    renderInspection(activeInspection.work_order_id);
+  }
+  function openAppointmentDetails(a){
+    const v=records.find(x=>x.orderId===a.work_order_id);
+    const old=$('#data-dialog');if(old)old.remove();
+    const action=a.work_order_id?'<button class="primary-btn" type="button" data-action="start-inspection" data-work-order-id="'+esc(a.work_order_id)+'">Commencer la validation du véhicule</button>':'';
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><div class="dialog-head"><h2>'+esc(a.title)+'</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">'+timeLabel(a.starts_at)+' – '+timeLabel(a.ends_at)+'</p><p>'+(v?esc(v.brand+' '+v.model+' · '+v.plate+' — '+v.clientName):'Intervention atelier')+'</p><p class="muted">'+esc(a.notes||'Aucune note')+'</p><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Fermer</button>'+action+'</div></dialog>');
+    $('#data-dialog').showModal();
+  }
+  async function archiveVehicleByVehicle(vehicleId){
+    if(!isAdmin())throw new Error('Seule l’administration peut archiver un véhicule.');
+    const v=records.find(x=>x.id===vehicleId);if(!v?.orderId)throw new Error('Dossier introuvable.');
+    if(!confirm('Archiver définitivement ce dossier véhicule ?'))return;
+    const {error}=await client.from('work_orders').update({status:'closed'}).eq('id',v.orderId).eq('garage_id',garageId);
+    if(error)throw error;
+    const inspection=inspections.find(x=>x.work_order_id===v.orderId&&x.status==='submitted');
+    if(inspection){const {error:ie}=await client.from('inspections').update({status:'archived'}).eq('id',inspection.id);if(ie)throw ie;}
+    await loadRecords();view='archives';render();
   }
 
   /* WORKSHOP_PLANNING_MODULE */
@@ -576,16 +638,20 @@
     if(action==='edit-mechanic')openEditMechanicDialog(id);
     if(action==='toggle-mechanic'){const active=btn.dataset.active==='true';if(confirm(active?'Suspendre l’accès de ce mécanicien ?':'Réactiver l’accès de ce mécanicien ?'))manageMechanic(id,active?'deactivate':'activate').catch(err=>alert(errorMessage(err)));}
     if(action==='add-mechanic')addMechanic(id).catch(err=>alert(errorMessage(err)));
-    if(action==='appointment'){const a=appointments.find(x=>x.id===id);if(a)alert(a.title+' | '+timeLabel(a.starts_at)+' – '+timeLabel(a.ends_at)+' | '+(a.notes||'Aucune note'));}
+    if(action==='appointment'){const a=appointments.find(x=>x.id===id);if(a)openAppointmentDetails(a);}
     if(action==='inspection'){const v=records.find(x=>x.id===id);if(v?.orderId)openInspection(v.orderId).catch(err=>alert(errorMessage(err)));}
     if(action==='back-orders'){view='orders';render();}
-    if(action==='finish-inspection')finishInspection().catch(err=>alert(errorMessage(err)));
+    if(action==='finish-inspection')submitInspection().catch(err=>alert(errorMessage(err)));
+    if(action==='start-inspection')openInspection(btn.dataset.workOrderId).catch(err=>alert(errorMessage(err)));
+    if(action==='message-client'){const v=records.find(x=>x.id===id);if(v)sms(v);}
+    if(action==='archive-vehicle'){archiveVehicleByVehicle(id).catch(err=>alert(errorMessage(err)));}
   });
   document.addEventListener('change',async ev=>{
     const el=ev.target;
     if(el.dataset.action==='status')changeStatus(el.dataset.id,el.value);
     if(el.dataset.action==='check-result'&&el.value)saveInspectionResult(el.dataset.item,{state:el.value,note:el.value==='anomaly'?(inspectionResults.find(r=>r.item_id===el.dataset.item)?.note||null):null}).then(()=>renderInspection(activeInspection.work_order_id)).catch(err=>alert(errorMessage(err)));
     if(el.dataset.action==='check-note')saveInspectionResult(el.dataset.item,{note:el.value}).catch(err=>alert(errorMessage(err)));
+    if(el.dataset.action==='inspection-attachment'&&el.files?.length)uploadInspectionAttachments(el.dataset.item,el.files).catch(err=>alert(errorMessage(err)));
     if(el.dataset.action==='quote-status'){
       const {error}=await client.from('quotes').update({status:el.value}).eq('id',el.dataset.id).eq('garage_id',garageId);
       if(error)alert('Décision du devis non enregistrée : '+errorMessage(error));
