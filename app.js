@@ -244,7 +244,7 @@
       const c=clients.find(x=>x.id===v.client_id)||{};
       const o=orders.find(x=>x.vehicle_id===v.id)||{};
       const qs=quotes.filter(q=>q.vehicle_id===v.id).map(q=>({
-        id:q.id, description:q.title, amount:q.amount,
+        id:q.id, quote_number:q.quote_number, title:q.title, description:q.title, amount:q.amount,
         decision:({pending:'En attente',accepted:'Accepté',rejected:'Refusé',expired:'Expiré'})[q.status]||'En attente',
         createdAt:q.created_at, items:quoteItems.filter(it=>it.quote_id===q.id)
       }));
@@ -403,29 +403,88 @@
   }
 
   let pendingClientMessage=null;
+  function buildQuotePdf(v,quote){
+    if(!window.jspdf?.jsPDF)throw new Error('Le générateur PDF ne s’est pas chargé. Vérifiez votre connexion puis réessayez.');
+    const {jsPDF}=window.jspdf,doc=new jsPDF({unit:'mm',format:'a4'}),pageWidth=210,margin=16;
+    let y=20;
+    const line=(txt,size=10,bold=false)=>{
+      doc.setFont('helvetica',bold?'bold':'normal');doc.setFontSize(size);
+      const lines=doc.splitTextToSize(String(txt||''),pageWidth-margin*2);
+      for(const part of lines){if(y>276){doc.addPage();y=20;}doc.text(part,margin,y);y+=size*0.48+2;}
+    };
+    const rule=()=>{doc.setDrawColor(210);doc.line(margin,y,pageWidth-margin,y);y+=7;};
+    doc.setFont('helvetica','bold');doc.setFontSize(21);doc.text(garageName||'Atelier',margin,y);y+=10;
+    doc.setFont('helvetica','normal');doc.setFontSize(9);
+    [garageDetails.address,[(garageDetails.postal_code||''), (garageDetails.city||'')].filter(Boolean).join(' '),garageDetails.phone,garageDetails.email].filter(Boolean).forEach(t=>{doc.text(String(t),margin,y);y+=5;});
+    y+=5;rule();
+    line('DEVIS '+(quote.quote_number||''),16,true);
+    line('Date : '+new Intl.DateTimeFormat('fr-BE').format(new Date(quote.createdAt||Date.now())));
+    line('Client : '+v.clientName);
+    if(v.phone)line('Téléphone : '+v.phone);
+    if(v.email)line('E-mail : '+v.email);
+    line('Véhicule : '+v.brand+' '+v.model+' — '+v.plate);
+    y+=3;rule();line('Objet : '+(quote.title||quote.description||'Intervention'),11,true);y+=3;
+    doc.setFont('helvetica','bold');doc.setFontSize(9);
+    doc.text('Désignation',margin,y);doc.text('Qté',132,y);doc.text('Prix unit.',151,y);doc.text('Total',pageWidth-margin,y,{align:'right'});y+=6;rule();
+    (quote.items||[]).forEach(item=>{
+      const desc=doc.splitTextToSize(String(item.description||''),105);
+      const rowHeight=Math.max(6,desc.length*5);
+      if(y+rowHeight+5>276){doc.addPage();y=20;}
+      doc.setFont('helvetica','normal');doc.setFontSize(9);
+      doc.text(desc,margin,y);
+      doc.text(String(item.quantity??1),132,y);
+      doc.text(Number(item.unit_price||0).toFixed(2)+' EUR',151,y);
+      doc.text(Number(item.total_price||0).toFixed(2)+' EUR',pageWidth-margin,y,{align:'right'});
+      y+=rowHeight+2;
+    });
+    y+=4;rule();doc.setFont('helvetica','bold');doc.setFontSize(13);
+    doc.text('TOTAL : '+Number(quote.amount||0).toFixed(2)+' EUR',pageWidth-margin,y,{align:'right'});
+    y+=12;doc.setFont('helvetica','normal');doc.setFontSize(8);
+    line('Ce document constitue le devis établi par '+(garageName||'votre atelier')+'.',8);
+    return doc.output('blob');
+  }
+  async function createQuotePdfLink(v,quote){
+    const pdf=buildQuotePdf(v,quote),path=garageId+'/quotes/'+quote.id+'-'+Date.now()+'.pdf';
+    const {error:uploadError}=await client.storage.from('inspection-attachments').upload(path,pdf,{contentType:'application/pdf',upsert:false});
+    if(uploadError)throw uploadError;
+    const {data,error}=await client.storage.from('inspection-attachments').createSignedUrl(path,604800);
+    if(error)throw error;
+    if(!data?.signedUrl)throw new Error('Le lien sécurisé du devis n’a pas pu être créé.');
+    return data.signedUrl;
+  }
   function openClientMessageDialog(vehicleId){
     if(!isAdmin())return;
     const v=records.find(x=>x.id===vehicleId);if(!v?.orderId)throw new Error('Dossier introuvable.');
     if(!v.phone&&!v.email)throw new Error('Ajoutez un numéro de téléphone ou une adresse e-mail au client.');
-    const message='Bonjour '+v.clientName+', le contrôle de votre '+v.brand+' '+v.model+' ('+v.plate+') est terminé. Votre devis est prêt. Contactez-nous pour toute question. Merci.';
-    pendingClientMessage={vehicleId,channel:v.phone?'sms':'email',message,launched:false};
+    const quotes=[...(v.quotes||[])].sort((a,b)=>new Date(b.createdAt||0)-new Date(a.createdAt||0));
+    if(!quotes.length)throw new Error('Aucun devis n’est enregistré pour ce véhicule. Créez d’abord un devis dans son dossier.');
+    const defaultQuote=quotes[0];
+    const message='Bonjour '+v.clientName+', le contrôle de votre '+v.brand+' '+v.model+' ('+v.plate+') est terminé. Vous trouverez votre devis PDF via le lien ci-dessous. Contactez-nous pour toute question. Merci.';
+    pendingClientMessage={vehicleId,channel:v.phone?'sms':'email',message,launched:false,quoteId:defaultQuote.id};
     const old=$('#data-dialog');if(old)old.remove();
-    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><div class="dialog-head"><h2>Contacter le client</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Choisissez le moyen de contact et vérifiez le texte. Après l’envoi dans votre application Messages ou Mail, revenez ici et confirmez pour archiver le véhicule.</p><label>Envoyer par<select id="client-message-channel"><option value="sms" '+(v.phone?'':'disabled')+'>SMS'+(v.phone?'':' — numéro absent')+'</option><option value="email" '+(v.phone?'':'selected')+' '+(v.email?'':'disabled')+'>E-mail'+(v.email?'':' — adresse absente')+'</option></select></label><label>Message<textarea id="client-message-body" rows="5">'+esc(message)+'</textarea></label><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="button" data-action="launch-client-message">Ouvrir SMS / Mail</button><button class="secondary-btn" type="button" data-action="confirm-client-message" disabled>J’ai envoyé — archiver</button></div></dialog>');
+    const quoteOptions=quotes.map(q=>'<option value="'+esc(q.id)+'">'+esc((q.quote_number||'Devis')+' — '+(q.title||q.description||'')+' — '+money(q.amount))+'</option>').join('');
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><div class="dialog-head"><h2>Envoyer le devis au client</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Le devis sera généré en PDF et hébergé avec un lien sécurisé. Le client pourra l’ouvrir depuis le SMS ou l’e-mail.</p><label>Devis à joindre (PDF)<select id="client-message-quote">'+quoteOptions+'</select></label><label>Envoyer par<select id="client-message-channel"><option value="sms" '+(v.phone?'':'disabled')+'>SMS'+(v.phone?'':' — numéro absent')+'</option><option value="email" '+(v.phone?'':'selected')+' '+(v.email?'':'disabled')+'>E-mail'+(v.email?'':' — adresse absente')+'</option></select></label><label>Message<textarea id="client-message-body" rows="5">'+esc(message)+'</textarea></label><p class="muted">Le lien PDF est ajouté automatiquement au message. Il reste accessible pendant 7 jours.</p><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="button" data-action="launch-client-message">Générer le PDF et ouvrir SMS / Mail</button><button class="secondary-btn" type="button" data-action="confirm-client-message" disabled>J’ai envoyé — archiver</button></div></dialog>');
     $('#data-dialog').showModal();
   }
   async function launchClientMessage(){
     if(!pendingClientMessage)throw new Error('Aucun message en préparation.');
-    const v=records.find(x=>x.id===pendingClientMessage.vehicleId),channel=$('#client-message-channel').value,message=$('#client-message-body').value.trim();
-    if(!message)throw new Error('Le message ne peut pas être vide.');
-    if(channel==='sms'){
-      if(!v.phone)throw new Error('Numéro de téléphone manquant.');
-      window.location.href='sms:'+encodeURIComponent(v.phone)+'&body='+encodeURIComponent(message);
-    }else{
-      if(!v.email)throw new Error('Adresse e-mail manquante.');
-      window.location.href='mailto:'+encodeURIComponent(v.email)+'?subject='+encodeURIComponent('Votre véhicule et votre devis '+garageName)+'&body='+encodeURIComponent(message);
-    }
-    pendingClientMessage={...pendingClientMessage,channel,message,launched:true};
-    $('[data-action="confirm-client-message"]').disabled=false;
+    const v=records.find(x=>x.id===pendingClientMessage.vehicleId),channel=$('#client-message-channel').value,quoteId=$('#client-message-quote').value;
+    const quote=(v?.quotes||[]).find(q=>q.id===quoteId);if(!quote)throw new Error('Sélectionnez un devis valide.');
+    let message=$('#client-message-body').value.trim();if(!message)throw new Error('Le message ne peut pas être vide.');
+    const btn=$('[data-action="launch-client-message"]');btn.disabled=true;btn.textContent='Génération du PDF…';
+    try{
+      const pdfLink=await createQuotePdfLink(v,quote);
+      message=message+'\n\nVotre devis en PDF : '+pdfLink;
+      if(channel==='sms'){
+        if(!v.phone)throw new Error('Numéro de téléphone manquant.');
+        window.location.href='sms:'+encodeURIComponent(v.phone)+'&body='+encodeURIComponent(message);
+      }else{
+        if(!v.email)throw new Error('Adresse e-mail manquante.');
+        window.location.href='mailto:'+encodeURIComponent(v.email)+'?subject='+encodeURIComponent('Votre devis '+(quote.quote_number||'')+' — '+garageName)+'&body='+encodeURIComponent(message);
+      }
+      pendingClientMessage={...pendingClientMessage,channel,message,quoteId,launched:true};
+      $('[data-action="confirm-client-message"]').disabled=false;
+    }finally{btn.disabled=false;btn.textContent='Générer le PDF et ouvrir SMS / Mail';}
   }
   async function confirmClientMessageAndArchive(){
     if(!pendingClientMessage?.launched)throw new Error('Ouvrez d’abord votre application SMS ou Mail et envoyez le message.');
