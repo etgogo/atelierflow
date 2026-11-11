@@ -239,9 +239,9 @@
       '</tbody></table></div>';
   }
   function render() {
-    document.querySelectorAll('.nav-item').forEach(b=>{ b.hidden = !isAdmin() && !['dashboard','planning'].includes(b.dataset.view); });
+    document.querySelectorAll('.nav-item').forEach(b=>{ b.hidden = !isAdmin() && !['dashboard','planning','settings'].includes(b.dataset.view); });
     $('#new-vehicle').hidden = !isAdmin();
-    if (!isAdmin() && !['dashboard','planning'].includes(view)) view='planning';
+    if (!isAdmin() && !['dashboard','planning','settings'].includes(view)) view='planning';
     const titles={dashboard:t('dashboard'),vehicles:t('vehicles'),orders:t('orders'),quotes:t('quotes'),planning:t('planning'),team:t('team'),settings:t('settings')};
     $('#page-title').textContent=titles[view]||titles.dashboard;
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
@@ -379,7 +379,16 @@
   }
 
   function renderSettings(){
-    $('#app').innerHTML='<section class="panel settings-panel"><div class="panel-heading"><div><h2>'+t('settingsTitle')+'</h2><p class="muted">Personnalisez votre espace AtelierFlow.</p></div></div><div class="settings-row"><div><label for="language-setting"><b>'+t('language')+'</b></label><p class="muted">'+t('languageHint')+'</p></div><select id="language-setting" class="settings-select" disabled><option value="fr" selected>Français</option></select></div><p class="muted settings-note">Toute l’interface AtelierFlow est réglée en français. D’autres langues pourront être ajoutées ultérieurement.</p></section>';
+    $('#app').innerHTML='<section class="panel settings-panel"><div class="panel-heading"><div><h2>'+t('settingsTitle')+'</h2><p class="muted">Personnalisez votre espace AtelierFlow.</p></div></div><div class="settings-row"><div><label for="language-setting"><b>'+t('language')+'</b></label><p class="muted">'+t('languageHint')+'</p></div><select id="language-setting" class="settings-select" disabled><option value="fr" selected>Français</option></select></div><p class="muted settings-note">Toute l’interface AtelierFlow est réglée en français. D’autres langues pourront être ajoutées ultérieurement.</p></section><section class="panel settings-panel"><div class="panel-heading"><div><h2>Mon mot de passe</h2><p class="muted">Modifiez votre mot de passe sans vous déconnecter de votre atelier.</p></div></div><form id="change-password-form" class="form-grid"><label class="full">Nouveau mot de passe<input name="password" type="password" minlength="8" autocomplete="new-password" required></label><label class="full">Confirmer le nouveau mot de passe<input name="confirm_password" type="password" minlength="8" autocomplete="new-password" required></label><div id="change-password-message" class="notice full" hidden></div><div class="dialog-actions full"><button class="primary-btn" type="submit">Modifier mon mot de passe</button></div></form></section>';
+    $('#change-password-form').addEventListener('submit',async ev=>{
+      ev.preventDefault();const form=ev.currentTarget,password=form.elements.password.value,confirmation=form.elements.confirm_password.value,btn=form.querySelector('[type=submit]');
+      if(password.length<8){notice('#change-password-message','Le mot de passe doit contenir au moins 8 caractères.','error');return;}
+      if(password!==confirmation){notice('#change-password-message','Les deux mots de passe ne correspondent pas.','error');return;}
+      btn.disabled=true;btn.textContent='Modification…';
+      try{const {error}=await client.auth.updateUser({password});if(error)throw error;form.reset();notice('#change-password-message','Mot de passe modifié. Vous restez connecté.','success');}
+      catch(err){notice('#change-password-message',errorMessage(err),'error');}
+      finally{btn.disabled=false;btn.textContent='Modifier mon mot de passe';}
+    });
   }
 
   function renderTeam(){
@@ -405,24 +414,26 @@
   function openAddMechanicDialog(){
     if(!isAdmin())return;
     const old=$('#data-dialog');if(old)old.remove();
-    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><form id="add-mechanic-form"><div class="dialog-head"><h2>Créer un compte mécanicien</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Saisissez ses coordonnées. Un e-mail sécurisé lui permettra de choisir son mot de passe.</p><div class="form-grid"><label class="full">Nom complet<input name="full_name" required maxlength="100" autocomplete="name" placeholder="Ex. Jean Dupont"></label><label class="full">Adresse e-mail<input name="email" type="email" required maxlength="200" autocomplete="email" placeholder="mecanicien@exemple.be"></label></div><div id="mechanic-invite-message" class="notice" hidden></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le compte et envoyer l’invitation</button></div></form></dialog>');
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><form id="add-mechanic-form"><div class="dialog-head"><h2>Créer un compte mécanicien</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Créez le compte avec le mécanicien présent. Vous définissez ensemble son mot de passe initial ; il pourra ensuite le modifier dans ses paramètres.</p><div class="form-grid"><label class="full">Nom complet<input name="full_name" required maxlength="100" autocomplete="name" placeholder="Ex. Jean Dupont"></label><label class="full">Adresse e-mail<input name="email" type="email" required maxlength="200" autocomplete="email" placeholder="mecanicien@exemple.be"></label><label class="full">Mot de passe initial<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label class="full">Confirmer le mot de passe<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label></div><div id="mechanic-invite-message" class="notice" hidden></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le compte mécanicien</button></div></form></dialog>');
     const dlg=$('#data-dialog');dlg.showModal();
     $('#add-mechanic-form').addEventListener('submit',async ev=>{
       ev.preventDefault();const form=ev.currentTarget,btn=form.querySelector('[type=submit]');
-      const fullName=form.elements.full_name.value.trim(),email=form.elements.email.value.trim().toLowerCase();
+      const fullName=form.elements.full_name.value.trim(),email=form.elements.email.value.trim().toLowerCase(),password=form.elements.password.value,confirmation=form.elements.confirm_password.value;
       if(!fullName||!email)return;
+      if(password.length<8){notice('#mechanic-invite-message','Le mot de passe doit contenir au moins 8 caractères.','error');return;}
+      if(password!==confirmation){notice('#mechanic-invite-message','Les deux mots de passe ne correspondent pas.','error');return;}
       btn.disabled=true;btn.textContent='Création du compte…';
       try{
-        const {data,error}=await client.functions.invoke('invite-mechanic',{body:{garageId,fullName,email}});
+        const {data,error}=await client.functions.invoke('invite-mechanic',{body:{garageId,fullName,email,password}});
         if(error)throw error;
         if(data?.error)throw new Error(data.error);
-        notice('#mechanic-invite-message','Compte créé et invitation envoyée à '+email+'. Le mécanicien doit ouvrir le message et choisir son mot de passe.','success');
-        btn.textContent='Invitation envoyée';
+        notice('#mechanic-invite-message','Compte créé pour '+email+'. Le mécanicien peut se connecter avec le mot de passe défini ensemble et le modifier dans Paramètres.','success');
+        btn.textContent='Compte créé';
         await loadRecords();render();
         setTimeout(()=>{if(dlg.open){dlg.close();dlg.remove();}},1800);
       }catch(err){
         notice('#mechanic-invite-message',errorMessage(err),'error');
-        btn.disabled=false;btn.textContent='Créer le compte et envoyer l’invitation';
+        btn.disabled=false;btn.textContent='Créer le compte mécanicien';
       }
     });
   }
@@ -505,25 +516,25 @@
       const items=checklistItems.filter(i=>i.category_id===cat.id);
       return '<section class="check-group"><h3>'+esc(cat.name)+'</h3>'+items.map(item=>{
         const result=inspectionResults.find(r=>r.item_id===item.id),state=result?.state||'';
-        return '<div class="check-row"><b>'+esc(item.name)+'</b><select data-action="check-result" data-item="'+esc(item.id)+'" '+(!isAdmin()?'disabled':'')+'><option value="ok" '+(state==='ok'?'selected':'')+'>Conforme</option><option value="anomaly" '+(state==='anomaly'?'selected':'')+'>Anomalie</option><option value="n/a" '+(state==='n/a'?'selected':'')+'>Non applicable</option></select><input class="check-note" data-action="check-note" data-item="'+esc(item.id)+'" placeholder="Observation" value="'+esc(result?.note||'')+'" '+(!isAdmin()?'disabled':'')+'></div>';
+        return '<div class="check-row"><b>'+esc(item.name)+'</b><select data-action="check-result" data-item="'+esc(item.id)+'" '+(!isAdmin()?'disabled':'')+'><option value="" disabled '+(!state?'selected':'')+'>Choisir le résultat…</option><option value="ok" '+(state==='ok'?'selected':'')+'>Conforme</option><option value="anomaly" '+(state==='anomaly'?'selected':'')+'>Anomalie / non conforme</option><option value="n/a" '+(state==='n/a'?'selected':'')+'>Non applicable</option></select>'+(state==='anomaly'?'<label class="check-note-label">Commentaire obligatoire<input class="check-note" data-action="check-note" data-item="'+esc(item.id)+'" required placeholder="Décrivez le problème constaté" value="'+esc(result?.note||'')+'" '+(!isAdmin()?'disabled':'')+'></label>':'')+'</div>';
       }).join('')+'</section>';
     }).join('');
     $('#page-title').textContent='Contrôle véhicule';
     const done=inspectionResults.filter(r=>r.state==='ok'||r.state==='anomaly'||r.state==='n/a').length;
-    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour aux ordres</button></div><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés</div>'+sections+'<div class="button-row">'+(isAdmin()?'<button class="primary-btn" data-action="finish-inspection">Terminer le contrôle</button>':'<span class="muted">Consultation en lecture seule pour ce compte.</span>')+'</div></section>';
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour aux ordres</button></div><p class="muted">Sélectionnez un résultat pour chaque point. Un commentaire est obligatoire uniquement en cas d’anomalie ou de non-conformité.</p><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés</div>'+sections+'<div class="button-row">'+(isAdmin()?'<button class="primary-btn" data-action="finish-inspection">Terminer le contrôle</button>':'<span class="muted">Consultation en lecture seule pour ce compte.</span>')+'</div></section>';
   }
   async function saveInspectionResult(itemId,patch){
     if(!isAdmin())throw new Error('Les droits actuels autorisent uniquement l’administrateur à modifier les contrôles.');
     const current=inspectionResults.find(r=>r.item_id===itemId);
-    const payload={garage_id:garageId,inspection_id:activeInspection.id,item_id:itemId,...(current?{}:{state:'ok'}),...patch};
+    const payload={garage_id:garageId,inspection_id:activeInspection.id,item_id:itemId,...(current?{}:{}),...patch};
     const {data,error}=await client.from('inspection_results').upsert(payload,{onConflict:'inspection_id,item_id'}).select().single();
     if(error)throw error;
     const idx=inspectionResults.findIndex(r=>r.item_id===itemId);if(idx>=0)inspectionResults[idx]=data;else inspectionResults.push(data);
   }
   async function finishInspection(){
     if(!isAdmin())return;
-    const missing=checklistItems.filter(i=>!inspectionResults.some(r=>r.item_id===i.id));
-    if(missing.length){alert('Il reste '+missing.length+' contrôle(s) sans résultat.');return;}
+    const missing=checklistItems.filter(i=>{const r=inspectionResults.find(x=>x.item_id===i.id);return !r||!r.state||(r.state==='anomaly'&&!String(r.note||'').trim());});
+    if(missing.length){alert('Il reste '+missing.length+' contrôle(s) à compléter ou des anomalies sans commentaire ('+missing.length+').');return;}
     const {error}=await client.from('inspections').update({status:'completed'}).eq('id',activeInspection.id);
     if(error)throw error;alert('Contrôle terminé et enregistré.');
   }
@@ -556,7 +567,7 @@
   document.addEventListener('change',async ev=>{
     const el=ev.target;
     if(el.dataset.action==='status')changeStatus(el.dataset.id,el.value);
-    if(el.dataset.action==='check-result')saveInspectionResult(el.dataset.item,{state:el.value}).then(()=>renderInspection(activeInspection.work_order_id)).catch(err=>alert(errorMessage(err)));
+    if(el.dataset.action==='check-result'&&el.value)saveInspectionResult(el.dataset.item,{state:el.value,note:el.value==='anomaly'?(inspectionResults.find(r=>r.item_id===el.dataset.item)?.note||null):null}).then(()=>renderInspection(activeInspection.work_order_id)).catch(err=>alert(errorMessage(err)));
     if(el.dataset.action==='check-note')saveInspectionResult(el.dataset.item,{note:el.value}).catch(err=>alert(errorMessage(err)));
     if(el.dataset.action==='quote-status'){
       const {error}=await client.from('quotes').update({status:el.value}).eq('id',el.dataset.id).eq('garage_id',garageId);
