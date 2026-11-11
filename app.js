@@ -131,6 +131,7 @@
     const {data:garage,error:garageError} = await client.from('garages').select('name').eq('id',garageId).single();
     if (garageError) throw garageError;
     garageName = garage.name;
+    view = membershipRole === 'admin' ? 'dashboard' : 'planning';
     await enterApp();
   }
 
@@ -175,6 +176,23 @@
 
   async function loadRecords() {
     $('#app').innerHTML='<p class="empty">Synchronisation des données…</p>';
+    if (!isAdmin()) {
+      const results = await Promise.all([
+        client.from('appointments').select('*').eq('garage_id',garageId).order('starts_at'),
+        client.from('appointment_mechanics').select('*').eq('garage_id',garageId),
+        client.from('mechanic_profiles').select('*').eq('garage_id',garageId),
+        client.from('garage_memberships').select('id,profile_id,role,is_active').eq('garage_id',garageId).eq('is_active',true),
+        client.from('profiles').select('id,full_name,is_active')
+      ]);
+      for (const r of results) if (r.error) throw r.error;
+      appointments=results[0].data||[];
+      appointmentAssignments=results[1].data||[];
+      mechanicProfiles=results[2].data||[];
+      const memberships=results[3].data||[], profiles=results[4].data||[];
+      staff=memberships.map(m=>({profileId:m.profile_id,role:m.role,profile:profiles.find(p=>p.id===m.profile_id)||{},mechanic:mechanicProfiles.find(mp=>mp.profile_id===m.profile_id)||null}));
+      records=[];
+      return;
+    }
     const results = await Promise.all([
       client.from('clients').select('*').eq('garage_id',garageId).order('created_at',{ascending:false}),
       client.from('vehicles').select('*').eq('garage_id',garageId).order('created_at',{ascending:false}),
@@ -201,7 +219,7 @@
       }));
       const name=[c.first_name,c.last_name].filter(Boolean).join(' ')||c.company_name||'Client';
       const status=STATUS[o.status]||'À planifier';
-      const noteLines=String(o.conclusion||'').split('\n');
+      const noteLines=String(o.conclusion||'').split('\\n');
       return {
         id:v.id, clientId:c.id, orderId:o.id, clientName:name, phone:c.phone||'',
         brand:v.brand, model:v.model, plate:v.registration_number, plannedDate:o.planned_start,
@@ -221,6 +239,9 @@
       '</tbody></table></div>';
   }
   function render() {
+    document.querySelectorAll('.nav-item').forEach(b=>{ b.hidden = !isAdmin() && !['dashboard','planning'].includes(b.dataset.view); });
+    $('#new-vehicle').hidden = !isAdmin();
+    if (!isAdmin() && !['dashboard','planning'].includes(view)) view='planning';
     const titles={dashboard:t('dashboard'),vehicles:t('vehicles'),orders:t('orders'),quotes:t('quotes'),planning:t('planning'),team:t('team'),settings:t('settings')};
     $('#page-title').textContent=titles[view]||titles.dashboard;
     document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));
@@ -529,12 +550,22 @@
   (async()=>{
     try {
       const {data,error}=await client.auth.getSession(); if(error)throw error;
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+      const authType = hashParams.get('type') || new URLSearchParams(window.location.search).get('type') || '';
+      const isPasswordSetup = new URLSearchParams(window.location.search).get('setup-password') === '1' || authType === 'invite' || authType === 'recovery';
       if(data.session){
         user=data.session.user;
-        if(new URLSearchParams(window.location.search).get('setup-password')==='1'){
-          $('#auth-form').hidden=true;$('#toggle-signup').hidden=true;$('#password-setup-panel').hidden=false;showScreen('auth');
+        if(isPasswordSetup){
+          $('#auth-form').hidden=true;
+          $('#toggle-signup').hidden=true;
+          $('#password-setup-panel').hidden=false;
+          showScreen('auth');
         }else await continueAfterAuth();
-      } else showScreen('auth');
+      } else {
+        showScreen('auth');
+        const authError = hashParams.get('error_description') || new URLSearchParams(window.location.search).get('error_description');
+        if (authError) notice('#auth-message','Le lien d’invitation a expiré ou n’est plus valide. Demandez à l’administrateur de renvoyer une invitation.','error');
+      }
     } catch(err) { showScreen('auth');notice('#auth-message',errorMessage(err),'error'); }
   })();
 })();
