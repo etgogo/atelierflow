@@ -316,10 +316,7 @@
     if(el.dataset.action==='status')changeStatus(el.dataset.id,el.value);
   });
   $('#new-vehicle').addEventListener('click',()=>openForm('new'));
-  client.auth.onAuthStateChange(async (_event,session)=>{
-    if(session && !user){user=session.user; try{await continueAfterAuth();}catch(err){showScreen('auth');notice('#auth-message',errorMessage(err),'error');}}
-    if(!session){user=null;garageId=null;showScreen('auth');}
-  });
+  // The initial session is restored below; explicit sign-in/sign-out handlers manage UI state.
   (async()=>{
     try {
       const {data,error}=await client.auth.getSession(); if(error)throw error;
