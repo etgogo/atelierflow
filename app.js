@@ -566,7 +566,7 @@
       const items=checklistItems.filter(i=>i.category_id===cat.id);
       return '<section class="check-group"><h3>'+esc(cat.name)+'</h3>'+items.map(item=>{
         const result=inspectionResults.find(r=>r.item_id===item.id),state=result?.state||'';
-        const editable=activeInspection.status==='in_progress';
+        const editable=['in_progress','completed'].includes(activeInspection.status);
         const files=inspectionAttachments.filter(f=>f.storage_path.includes('/'+item.id+'/'));
         return '<div class="check-row"><b>'+esc(item.name)+'</b><select data-action="check-result" data-item="'+esc(item.id)+'" '+(!editable?'disabled':'')+'><option value="" disabled '+(!state?'selected':'')+'>Choisir le résultat…</option><option value="ok" '+(state==='ok'?'selected':'')+'>Conforme</option><option value="anomaly" '+(state==='anomaly'?'selected':'')+'>Anomalie / non conforme</option><option value="n/a" '+(state==='n/a'?'selected':'')+'>Non applicable</option></select>'+(state==='anomaly'?'<div class="inspection-anomaly"><label class="check-note-label">Commentaire obligatoire<textarea class="check-note" data-action="check-note" data-item="'+esc(item.id)+'" required placeholder="Décrivez le problème constaté" '+(!editable?'disabled':'')+'>'+esc(result?.note||'')+'</textarea></label>'+(editable?'<label class="attachment-upload">Ajouter une photo ou un document<input type="file" data-action="inspection-attachment" data-item="'+esc(item.id)+'" accept="image/jpeg,image/png,image/webp,application/pdf" multiple></label>':'')+(files.length?'<ul class="attachment-list">'+files.map(f=>'<li>'+(f.signed_url?'<a href="'+esc(f.signed_url)+'" target="_blank" rel="noopener">'+esc(f.file_name)+'</a>':esc(f.file_name))+'</li>').join('')+'</ul>':'')+'</div>':'')+'</div>';
       }).join('')+'</section>';
@@ -575,10 +575,10 @@
     const done=inspectionResults.filter(r=>r.state==='ok'||r.state==='anomaly'||r.state==='n/a').length;
     const editable=activeInspection.status==='in_progress';
     const adminReview=isAdmin()&&activeInspection.status==='submitted';
-    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour au planning</button></div><p class="muted">Sélectionnez un résultat pour chaque point. Un commentaire est obligatoire uniquement en cas d’anomalie ou de non-conformité.</p><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés · '+(activeInspection.status==='submitted'?'Transmis à l’administration':activeInspection.status==='archived'?'Archivé':'En cours')+'</div>'+sections+'<div class="button-row">'+(editable?'<button class="primary-btn" data-action="finish-inspection">Valider et transmettre à l’administration</button>':adminReview?'<button class="secondary-btn" data-action="message-client" data-id="'+esc(v?.id||'')+'">Envoyer un message au client</button><button class="primary-btn" data-action="archive-vehicle" data-id="'+esc(v?.id||'')+'">Confirmer la remise et archiver</button>':'<span class="muted">Ce contrôle est en lecture seule.</span>')+'</div></section>';
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>'+esc(v?v.brand+' '+v.model:'Contrôle')+'</h2><p class="muted">'+esc(v?v.plate:'')+' · '+esc(v?v.clientName:'')+'</p></div><button class="secondary-btn" data-action="back-orders">Retour au planning</button></div><p class="muted">Sélectionnez un résultat pour chaque point. Un commentaire est obligatoire uniquement en cas d’anomalie ou de non-conformité.</p><div class="inspection-progress">'+done+' / '+checklistItems.length+' contrôles enregistrés · '+(activeInspection.status==='submitted'?'Transmis à l’administration':activeInspection.status==='archived'?'Archivé':'En cours')+'</div>'+sections+'<div class="button-row">'+(activeInspection.status==='in_progress'?'<button class="primary-btn" data-action="finish-inspection">Valider et transmettre à l’administration</button>':activeInspection.status==='completed'?'<span class="muted">Contrôle modifiable — les changements sont enregistrés automatiquement.</span>':adminReview?'<button class="secondary-btn" data-action="message-client" data-id="'+esc(v?.id||'')+'">Envoyer un message au client</button><button class="primary-btn" data-action="archive-vehicle" data-id="'+esc(v?.id||'')+'">Confirmer la remise et archiver</button>':'<span class="muted">Ce contrôle est en lecture seule.</span>')+'</div></section>';
   }
   async function saveInspectionResult(itemId,patch){
-    if(activeInspection?.status!=='in_progress')throw new Error('Ce contrôle n’est plus modifiable.');
+    if(!['in_progress','completed'].includes(activeInspection?.status))throw new Error('Ce contrôle n’est plus modifiable.');
     const current=inspectionResults.find(r=>r.item_id===itemId);
     const payload={garage_id:garageId,inspection_id:activeInspection.id,item_id:itemId,...(current?{}:{}),...patch};
     const {data,error}=await client.from('inspection_results').upsert(payload,{onConflict:'inspection_id,item_id'}).select().single();
@@ -598,7 +598,7 @@
   }
 
   async function uploadInspectionAttachments(itemId,fileList){
-    if(activeInspection?.status!=='in_progress')throw new Error('Ce contrôle n’accepte plus de pièces jointes.');
+    if(!['in_progress','completed'].includes(activeInspection?.status))throw new Error('Ce contrôle n’accepte plus de pièces jointes.');
     const result=inspectionResults.find(r=>r.item_id===itemId);
     if(result?.state!=='anomaly')throw new Error('Les pièces jointes sont disponibles pour un point signalé en anomalie.');
     const v=records.find(x=>x.orderId===activeInspection.work_order_id);
