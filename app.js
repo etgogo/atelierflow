@@ -429,7 +429,7 @@
     const title=String(d.get('description')||'').trim();
     if(!title)throw new Error('Indiquez le titre ou le diagnostic du devis.');
     const readNumber=(name,fallback)=>{
-      const raw=String(d.get(name)??'').trim().replace(/\\s/g,'').replace(',','.');
+      const raw=String(d.get(name)??'').trim().replace(/\s/g,'').replace(',','.');
       if(!raw)return fallback;
       const value=Number(raw);
       if(!Number.isFinite(value))throw new Error('Vérifiez le champ '+name+'.');
