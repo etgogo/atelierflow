@@ -27,6 +27,7 @@
   };
   let user = null, garageId = null, garageName = '', records = [], view = 'dashboard', selectedId = null;
   let signupMode = false;
+  let inspectionSaveQueue=Promise.resolve(), inspectionAttachmentQueue=Promise.resolve();
   let language = 'fr';
   localStorage.setItem('atelierflow-language','fr');
   const I18N = {
@@ -585,6 +586,9 @@
   }
   async function submitInspection(){
     if(activeInspection?.status!=='in_progress')return;
+    await inspectionSaveQueue;await inspectionAttachmentQueue;
+    const {data:latestResults,error:resultsError}=await client.from('inspection_results').select('*').eq('inspection_id',activeInspection.id);
+    if(resultsError)throw resultsError;inspectionResults=latestResults||[];
     const missing=checklistItems.filter(i=>{const r=inspectionResults.find(x=>x.item_id===i.id);return !r||!r.state||(r.state==='anomaly'&&!String(r.note||'').trim());});
     if(missing.length){alert('Il reste '+missing.length+' contrôle(s) à compléter ou des anomalies sans commentaire ('+missing.length+').');return;}
     const {data,error}=await client.from('inspections').update({status:'submitted'}).eq('id',activeInspection.id).eq('garage_id',garageId).select().single();
@@ -661,9 +665,9 @@
   document.addEventListener('change',async ev=>{
     const el=ev.target;
     if(el.dataset.action==='status')changeStatus(el.dataset.id,el.value);
-    if(el.dataset.action==='check-result'&&el.value)saveInspectionResult(el.dataset.item,{state:el.value,note:el.value==='anomaly'?(inspectionResults.find(r=>r.item_id===el.dataset.item)?.note||null):null}).then(()=>renderInspection(activeInspection.work_order_id)).catch(err=>alert(errorMessage(err)));
-    if(el.dataset.action==='check-note')saveInspectionResult(el.dataset.item,{note:el.value}).catch(err=>alert(errorMessage(err)));
-    if(el.dataset.action==='inspection-attachment'&&el.files?.length)uploadInspectionAttachments(el.dataset.item,el.files).catch(err=>alert(errorMessage(err)));
+    if(el.dataset.action==='check-result'&&el.value)inspectionSaveQueue=inspectionSaveQueue.then(()=>saveInspectionResult(el.dataset.item,{state:el.value,note:el.value==='anomaly'?(inspectionResults.find(r=>r.item_id===el.dataset.item)?.note||null):null})).then(()=>renderInspection(activeInspection.work_order_id)).catch(err=>alert(errorMessage(err)));
+    if(el.dataset.action==='check-note')inspectionSaveQueue=inspectionSaveQueue.then(()=>saveInspectionResult(el.dataset.item,{note:el.value})).catch(err=>alert(errorMessage(err)));
+    if(el.dataset.action==='inspection-attachment'&&el.files?.length)inspectionAttachmentQueue=inspectionAttachmentQueue.then(()=>uploadInspectionAttachments(el.dataset.item,el.files)).catch(err=>alert(errorMessage(err)));
     if(el.dataset.action==='quote-status'){
       const {error}=await client.from('quotes').update({status:el.value}).eq('id',el.dataset.id).eq('garage_id',garageId);
       if(error)alert('Décision du devis non enregistrée : '+errorMessage(error));
