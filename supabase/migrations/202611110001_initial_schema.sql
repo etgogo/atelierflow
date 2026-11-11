@@ -482,7 +482,6 @@ CREATE TRIGGER quotes_set_updated_at
 BEFORE UPDATE ON public.quotes
 FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
-CREATE TRIGGER garage_membership_permissions_unique_check
-BEFORE INSERT OR UPDATE ON public.membership_permissions
-FOR EACH ROW
-EXECUTE FUNCTION public.set_updated_at();
+-- membership_permissions has no updated_at column, so it must not use
+-- set_updated_at(). Its UNIQUE (membership_id, permission_key) constraint
+-- already enforces uniqueness.
