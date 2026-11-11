@@ -445,7 +445,11 @@
         await loadRecords();render();
         setTimeout(()=>{if(dlg.open){dlg.close();dlg.remove();}},1800);
       }catch(err){
-        notice('#mechanic-invite-message',errorMessage(err),'error');
+        let message=errorMessage(err);
+        if(err?.context && typeof err.context.clone==='function'){
+          try{const responseBody=await err.context.clone().json();if(responseBody?.error)message=responseBody.error;}catch(_){}
+        }
+        notice('#mechanic-invite-message',message,'error');
         btn.disabled=false;btn.textContent='Créer le compte mécanicien';
       }
     });
