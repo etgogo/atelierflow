@@ -199,7 +199,7 @@
       $('#app').innerHTML='<section class="two-col"><div class="panel"><div class="panel-heading"><h2>Dossiers atelier</h2></div>'+vehicleRows(activeVehicles())+'</div><div class="panel">'+(selected?orderDetail(selected):'<p class="empty">Créez un dossier pour commencer.</p>')+'</div></section>';
     } else if(view==='quotes') {
       const rows=[];records.forEach(v=>v.quotes.forEach(q=>rows.push({v,q})));
-      $('#app').innerHTML='<section class="panel"><div class="panel-heading"><h2>Devis complémentaires</h2></div>'+(rows.length?'<div class="table-wrap"><table><thead><tr><th>Véhicule / client</th><th>Proposition</th><th>Montant</th><th>Décision</th></tr></thead><tbody>'+rows.map(x=>'<tr><td><strong>'+esc(x.v.brand)+' '+esc(x.v.model)+'</strong><small>'+esc(x.v.clientName)+'</small></td><td>'+esc(x.q.description)+'</td><td>'+money(x.q.amount)+'</td><td>'+esc(x.q.decision)+'</td></tr>').join('')+'</tbody></table></div>':'<p class="empty">Aucun devis enregistré.</p>')+'</section>';
+      $('#app').innerHTML='<section class="panel"><div class="panel-heading"><h2>Devis complémentaires</h2></div>'+(rows.length?'<div class="table-wrap"><table><thead><tr><th>Véhicule / client</th><th>Proposition</th><th>Montant</th><th>Décision</th></tr></thead><tbody>'+rows.map(x=>'<tr><td><strong>'+esc(x.v.brand)+' '+esc(x.v.model)+'</strong><small>'+esc(x.v.clientName)+'</small></td><td>'+esc(x.q.description)+'</td><td>'+money(x.q.amount)+'</td><td><select data-action="quote-status" data-id="'+esc(x.q.id)+'"><option value="pending" '+(x.q.decision==='En attente'?'selected':'')+'>En attente</option><option value="accepted" '+(x.q.decision==='Accepté'?'selected':'')+'>Accepté</option><option value="rejected" '+(x.q.decision==='Refusé'?'selected':'')+'>Refusé</option></select></td></tr>').join('')+'</tbody></table></div>':'<p class="empty">Aucun devis enregistré.</p>')+'</section>';
     } else {
       const list=records.slice().sort((a,b)=>String(a.plannedDate||'').localeCompare(String(b.plannedDate||'')));
       $('#app').innerHTML='<section class="panel"><div class="panel-heading"><h2>Planning des entrées</h2><p class="muted">Trié par date prévue</p></div>'+(list.length?'<div class="planning-list">'+list.map(v=>'<article class="planning-item"><div class="planning-date"><strong>'+date(v.plannedDate)+'</strong></div><div class="planning-info"><strong>'+esc(v.brand)+' '+esc(v.model)+' · '+esc(v.plate)+'</strong><span>'+esc(v.clientName)+' · '+esc(v.workRequested)+'</span></div><span class="badge '+statusClass(v.status)+'">'+esc(v.status)+'</span><button class="text-btn" data-action="open" data-id="'+esc(v.id)+'">Ouvrir</button></article>').join('')+'</div>':'<p class="empty">Aucun rendez-vous planifié.</p>')+'</section>';
@@ -311,9 +311,14 @@
     if(action==='status')return;
     if(action==='ready'){const v=records.find(x=>x.id===id);if(v&&confirm('Préparer un SMS indiquant que le véhicule est prêt ?'))sms(v);}
   });
-  document.addEventListener('change',ev=>{
+  document.addEventListener('change',async ev=>{
     const el=ev.target;
     if(el.dataset.action==='status')changeStatus(el.dataset.id,el.value);
+    if(el.dataset.action==='quote-status'){
+      const {error}=await client.from('quotes').update({status:el.value}).eq('id',el.dataset.id).eq('garage_id',garageId);
+      if(error)alert('Décision du devis non enregistrée : '+errorMessage(error));
+      await loadRecords(); render();
+    }
   });
   $('#new-vehicle').addEventListener('click',()=>openForm('new'));
   // The initial session is restored below; explicit sign-in/sign-out handlers manage UI state.
