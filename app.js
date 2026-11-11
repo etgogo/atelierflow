@@ -59,6 +59,22 @@
     return msg;
   }
 
+  $('#password-setup-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const f=ev.currentTarget, password=f.elements.password.value, confirmation=f.elements.confirm_password.value;
+    const btn=f.querySelector('button[type=submit]');
+    if(password.length<8){notice('#password-setup-message','Le mot de passe doit contenir au moins 8 caractères.','error');return;}
+    if(password!==confirmation){notice('#password-setup-message','Les deux mots de passe ne correspondent pas.','error');return;}
+    btn.disabled=true;btn.textContent='Enregistrement…';
+    try{
+      const {error}=await client.auth.updateUser({password});
+      if(error)throw error;
+      history.replaceState({},document.title,window.location.pathname);
+      notice('#password-setup-message','Mot de passe enregistré. Connexion à votre atelier…','success');
+      await continueAfterAuth();
+    }catch(err){notice('#password-setup-message',errorMessage(err),'error');btn.disabled=false;btn.textContent='Enregistrer mon mot de passe';}
+  });
+
   $('#toggle-signup').addEventListener('click', () => {
     signupMode = !signupMode;
     $('#name-field').hidden = !signupMode;
@@ -346,27 +362,31 @@
   }
 
   function renderTeam(){
-    const candidates=staff.filter(s=>!s.mechanic);
-    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Équipe de l’atelier</h2><p class="muted">Ajoutez un compte existant en un seul clic.</p></div>'+(isAdmin()?'<button class="primary-btn" data-action="open-add-mechanic">+ Ajouter un mécanicien</button>':'')+'</div><div class="team-list">'+(staff.length?staff.map(s=>'<article class="team-row"><div><b>'+esc(s.profile.full_name||'Compte sans nom')+'</b><small>'+(s.role==='admin'?'Administrateur':'Membre de l’atelier')+(s.profile.is_active===false?' · Inactif':'')+'</small></div><div>'+(s.mechanic?'<span class="badge green">Mécanicien créé</span>':(isAdmin()?'<span class="muted">Pas encore mécanicien</span>':'<span class="muted">Non configuré</span>'))+'</div></article>').join(''):'<p class="empty">Aucun membre n’est encore rattaché à cet atelier.</p>')+'</div>'+(isAdmin()?'<p class="muted team-help">Le compte du mécanicien doit déjà avoir rejoint cet atelier. Sélectionnez-le ensuite pour lui créer son profil et l’ajouter au planning.</p>':'')+'</section>';
+    $('#app').innerHTML='<section class="panel"><div class="panel-heading"><div><h2>Équipe de l’atelier</h2><p class="muted">Gérez les accès et les profils des mécaniciens.</p></div>'+(isAdmin()?'<button class="primary-btn" data-action="open-add-mechanic">+ Créer un compte mécanicien</button>':'')+'</div><div class="team-list">'+(staff.length?staff.map(s=>'<article class="team-row"><div><b>'+esc(s.profile.full_name||'Compte sans nom')+'</b><small>'+(s.role==='admin'?'Administrateur':'Mécanicien')+(s.profile.is_active===false?' · Inactif':'')+'</small></div><div>'+(s.mechanic?'<span class="badge green">Mécanicien actif</span>':'<span class="muted">Profil non configuré</span>')+'</div></article>').join(''):'<p class="empty">Aucun membre n’est encore rattaché à cet atelier.</p>')+'</div>'+(isAdmin()?'<p class="muted team-help">Créez le compte ici : le mécanicien recevra un e-mail pour définir son mot de passe. Son accès sera automatiquement rattaché à cet atelier.</p>':'')+'</section>';
   }
   function openAddMechanicDialog(){
     if(!isAdmin())return;
-    const candidates=staff.filter(s=>!s.mechanic);
-    if(!candidates.length){alert('Tous les membres actuels ont déjà un profil mécanicien. Pour ajouter une nouvelle personne, elle doit d’abord créer son compte et rejoindre cet atelier.');return;}
-    const options=candidates.map(s=>'<option value="'+esc(s.profileId)+'">'+esc(s.profile.full_name||'Compte sans nom')+' · '+esc(s.role==='admin'?'Administrateur':'Membre')+'</option>').join('');
     const old=$('#data-dialog');if(old)old.remove();
-    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><form id="add-mechanic-form"><div class="dialog-head"><h2>Ajouter un mécanicien</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Choisissez une personne déjà membre de votre atelier. Son profil sera ajouté au planning.</p><div class="form-grid"><label class="full">Membre à ajouter<select name="mechanic_profile_id" required>'+options+'</select></label></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le profil mécanicien</button></div></form></dialog>');
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><form id="add-mechanic-form"><div class="dialog-head"><h2>Créer un compte mécanicien</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Saisissez ses coordonnées. Un e-mail sécurisé lui permettra de choisir son mot de passe.</p><div class="form-grid"><label class="full">Nom complet<input name="full_name" required maxlength="100" autocomplete="name" placeholder="Ex. Jean Dupont"></label><label class="full">Adresse e-mail<input name="email" type="email" required maxlength="200" autocomplete="email" placeholder="mecanicien@exemple.be"></label></div><div id="mechanic-invite-message" class="notice" hidden></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le compte et envoyer l’invitation</button></div></form></dialog>');
     const dlg=$('#data-dialog');dlg.showModal();
     $('#add-mechanic-form').addEventListener('submit',async ev=>{
-      ev.preventDefault();const form=ev.currentTarget,btn=form.querySelector('[type=submit]');btn.disabled=true;
-      try{await addMechanic(form.elements.mechanic_profile_id.value);dlg.close();dlg.remove();}
-      catch(err){alert('Impossible de créer le profil : '+errorMessage(err));btn.disabled=false;}
+      ev.preventDefault();const form=ev.currentTarget,btn=form.querySelector('[type=submit]');
+      const fullName=form.elements.full_name.value.trim(),email=form.elements.email.value.trim().toLowerCase();
+      if(!fullName||!email)return;
+      btn.disabled=true;btn.textContent='Création du compte…';
+      try{
+        const {data,error}=await client.functions.invoke('invite-mechanic',{body:{garageId,fullName,email}});
+        if(error)throw error;
+        if(data?.error)throw new Error(data.error);
+        notice('#mechanic-invite-message','Compte créé et invitation envoyée à '+email+'. Le mécanicien doit ouvrir le message et choisir son mot de passe.','success');
+        btn.textContent='Invitation envoyée';
+        await loadRecords();render();
+        setTimeout(()=>{if(dlg.open){dlg.close();dlg.remove();}},1800);
+      }catch(err){
+        notice('#mechanic-invite-message',errorMessage(err),'error');
+        btn.disabled=false;btn.textContent='Créer le compte et envoyer l’invitation';
+      }
     });
-  }
-  async function addMechanic(profileId){
-    if(!isAdmin())throw new Error('Réservé à l’administrateur.');
-    const {error}=await client.from('mechanic_profiles').insert({garage_id:garageId,profile_id:profileId});
-    if(error)throw error;await loadRecords();render();
   }
   function openAppointmentForm(){
     if(!isAdmin())return;
@@ -509,7 +529,12 @@
   (async()=>{
     try {
       const {data,error}=await client.auth.getSession(); if(error)throw error;
-      if(data.session){user=data.session.user;await continueAfterAuth();} else showScreen('auth');
+      if(data.session){
+        user=data.session.user;
+        if(new URLSearchParams(window.location.search).get('setup-password')==='1'){
+          $('#auth-form').hidden=true;$('#toggle-signup').hidden=true;$('#password-setup-panel').hidden=false;showScreen('auth');
+        }else await continueAfterAuth();
+      } else showScreen('auth');
     } catch(err) { showScreen('auth');notice('#auth-message',errorMessage(err),'error'); }
   })();
 })();
