@@ -453,10 +453,8 @@ ON public.audit_logs
 FOR SELECT
 USING (public.is_garage_member(garage_id));
 
-CREATE POLICY "audit_logs_admin_only"
-ON public.audit_logs
-FOR ALL
-USING (public.is_garage_admin(garage_id));
+-- Audit rows are append-only. Inserts are performed by the SECURITY DEFINER
+-- audit trigger; application roles receive read access only through the policy above.
 
 -- The attachments policies are defined once above; duplicate policy names
 -- cause PostgreSQL to abort this migration.
