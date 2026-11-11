@@ -414,26 +414,24 @@
   function openAddMechanicDialog(){
     if(!isAdmin())return;
     const old=$('#data-dialog');if(old)old.remove();
-    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><form id="add-mechanic-form"><div class="dialog-head"><h2>Créer un compte mécanicien</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Créez le compte avec le mécanicien présent. Vous définissez ensemble son mot de passe initial ; il pourra ensuite le modifier dans ses paramètres.</p><div class="form-grid"><label class="full">Nom complet<input name="full_name" required maxlength="100" autocomplete="name" placeholder="Ex. Jean Dupont"></label><label class="full">Adresse e-mail<input name="email" type="email" required maxlength="200" autocomplete="email" placeholder="mecanicien@exemple.be"></label><label class="full">Mot de passe initial<input name="password" type="password" required minlength="8" autocomplete="new-password"></label><label class="full">Confirmer le mot de passe<input name="confirm_password" type="password" required minlength="8" autocomplete="new-password"></label></div><div id="mechanic-invite-message" class="notice" hidden></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le compte mécanicien</button></div></form></dialog>');
+    document.body.insertAdjacentHTML('beforeend','<dialog id="data-dialog"><form id="add-mechanic-form"><div class="dialog-head"><h2>Créer un compte mécanicien</h2><button class="icon-btn" type="button" data-action="close">×</button></div><p class="muted">Créez le compte avec le mécanicien présent. Un e-mail d’activation lui permettra de choisir son mot de passe avec vous ; il pourra ensuite le modifier dans ses paramètres.</p><div class="form-grid"><label class="full">Nom complet<input name="full_name" required maxlength="100" autocomplete="name" placeholder="Ex. Jean Dupont"></label><label class="full">Adresse e-mail<input name="email" type="email" required maxlength="200" autocomplete="email" placeholder="mecanicien@exemple.be"></label></div><div id="mechanic-invite-message" class="notice" hidden></div><div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close">Annuler</button><button class="primary-btn" type="submit">Créer le compte mécanicien</button></div></form></dialog>');
     const dlg=$('#data-dialog');dlg.showModal();
     $('#add-mechanic-form').addEventListener('submit',async ev=>{
       ev.preventDefault();const form=ev.currentTarget,btn=form.querySelector('[type=submit]');
-      const fullName=form.elements.full_name.value.trim(),email=form.elements.email.value.trim().toLowerCase(),password=form.elements.password.value,confirmation=form.elements.confirm_password.value;
+      const fullName=form.elements.full_name.value.trim(),email=form.elements.email.value.trim().toLowerCase();
       if(!fullName||!email)return;
-      if(password.length<8){notice('#mechanic-invite-message','Le mot de passe doit contenir au moins 8 caractères.','error');return;}
-      if(password!==confirmation){notice('#mechanic-invite-message','Les deux mots de passe ne correspondent pas.','error');return;}
       btn.disabled=true;btn.textContent='Création du compte…';
       try{
-        const {data,error}=await client.functions.invoke('invite-mechanic',{body:{garageId,fullName,email,password}});
+        const {data,error}=await client.functions.invoke('invite-mechanic',{body:{garageId,fullName,email}});
         if(error)throw error;
         if(data?.error)throw new Error(data.error);
-        notice('#mechanic-invite-message','Compte créé pour '+email+'. Le mécanicien peut se connecter avec le mot de passe défini ensemble et le modifier dans Paramètres.','success');
-        btn.textContent='Compte créé';
+        notice('#mechanic-invite-message','Invitation envoyée à '+email+'. Ouvrez le message ensemble pour que le mécanicien choisisse son mot de passe ; il pourra ensuite le modifier dans Paramètres.','success');
+        btn.textContent='Invitation envoyée';
         await loadRecords();render();
         setTimeout(()=>{if(dlg.open){dlg.close();dlg.remove();}},1800);
       }catch(err){
         notice('#mechanic-invite-message',errorMessage(err),'error');
-        btn.disabled=false;btn.textContent='Créer le compte mécanicien';
+        btn.disabled=false;btn.textContent='Créer le compte et envoyer l’invitation';
       }
     });
   }
