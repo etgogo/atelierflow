@@ -639,11 +639,11 @@
     const nav=ev.target.closest('[data-view]');
     if(nav){view=nav.dataset.view;render();return;}
     const viewBtn=ev.target.closest('[data-view-action]');
-    if(viewBtn){view=viewBtn.dataset.viewAction;render();return;}
+    if(viewBtn){if(!isAdmin() && viewBtn.dataset.viewAction!=='planning')return;view=viewBtn.dataset.viewAction;render();return;}
     const btn=ev.target.closest('[data-action]');
     if(!btn)return;
     const id=btn.dataset.id, action=btn.dataset.action;
-    if(!isAdmin() && !['appointment','start-inspection','check-result','check-note','inspection-attachment','finish-inspection','back-orders'].includes(action)) return;
+    if(!isAdmin() && !['appointment','start-inspection','check-result','check-note','inspection-attachment','finish-inspection','back-orders','close'].includes(action)) return;
     if(action==='open'){selectedId=id;view='orders';render();}
     if(action==='edit')openForm('edit',id);
     if(action==='add-quote')openForm('quote',id);
