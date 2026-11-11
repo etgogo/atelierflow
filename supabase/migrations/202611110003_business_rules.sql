@@ -171,7 +171,29 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
 AS $$
+DECLARE
+  v_garage_id UUID;
+  v_entity_id UUID;
+  v_old JSONB;
+  v_new JSONB;
 BEGIN
+  IF TG_OP = 'DELETE' THEN
+    v_garage_id := OLD.garage_id;
+    v_entity_id := OLD.id;
+    v_old := to_jsonb(OLD);
+    v_new := NULL;
+  ELSIF TG_OP = 'INSERT' THEN
+    v_garage_id := NEW.garage_id;
+    v_entity_id := NEW.id;
+    v_old := NULL;
+    v_new := to_jsonb(NEW);
+  ELSE
+    v_garage_id := NEW.garage_id;
+    v_entity_id := NEW.id;
+    v_old := to_jsonb(OLD);
+    v_new := to_jsonb(NEW);
+  END IF;
+
   INSERT INTO public.audit_logs (
     garage_id,
     entity_type,
@@ -181,15 +203,16 @@ BEGIN
     details
   )
   VALUES (
-    COALESCE(NEW.garage_id, OLD.garage_id),
+    v_garage_id,
     TG_TABLE_NAME,
-    COALESCE(NEW.id, OLD.id),
+    v_entity_id,
     TG_OP,
-    auth.uid(),
-    jsonb_build_object(
-      'old', to_jsonb(OLD),
-      'new', to_jsonb(NEW)
-    )
+    (
+      SELECT p.id
+      FROM public.profiles AS p
+      WHERE p.id = auth.uid()
+    ),
+    jsonb_build_object('old', v_old, 'new', v_new)
   );
 
   IF TG_OP = 'DELETE' THEN
