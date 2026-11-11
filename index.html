@@ -1,77 +1,171 @@
 <!doctype html>
 <html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Prototype de gestion d’atelier mécanique">
-  <title>AtelierFlow — Gestion atelier</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <a class="brand" href="#dashboard" aria-label="AtelierFlow, accueil"><span class="brand-mark">AF</span><strong>AtelierFlow</strong></a>
-      <nav class="nav" aria-label="Navigation principale">
-        <button class="nav-item active" data-view="dashboard">Tableau de bord</button>
-        <button class="nav-item" data-view="vehicles">Véhicules</button>
-        <button class="nav-item" data-view="orders">Ordres de travail</button>
-        <button class="nav-item" data-view="quotes">Devis</button>
-        <button class="nav-item" data-view="planning">Planning</button>
-      </nav>
-      <p class="sidebar-note">Prototype local · données enregistrées sur cet appareil</p>
-    </aside>
-    <main class="main-panel">
-      <header class="topbar">
-        <div><p class="eyebrow">Gestion d’atelier</p><h1 id="page-title">Tableau de bord</h1></div>
-        <button class="primary-btn" data-action="new-vehicle">+ Nouveau dossier</button>
-      </header>
-      <div id="app" aria-live="polite"></div>
-    </main>
-  </div>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AtelierFlow</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div id="auth-screen" class="auth-screen hidden"></div>
 
-  <dialog id="vehicle-dialog">
-    <form id="vehicle-form" method="dialog">
-      <div class="dialog-head"><h2>Nouveau dossier véhicule</h2><button class="icon-btn" type="button" data-action="close-dialog" aria-label="Fermer">×</button></div>
-      <div class="form-grid">
-        <label>Nom du client<input name="clientName" required maxlength="100"></label>
-        <label>Téléphone<input name="phone" type="tel" required maxlength="30" placeholder="06…"></label>
-        <label>Marque<input name="brand" required maxlength="60"></label>
-        <label>Modèle<input name="model" required maxlength="60"></label>
-        <label>Immatriculation<input name="plate" required maxlength="20"></label>
-        <label>Date prévue<input name="plannedDate" type="date" required></label>
-        <label class="full">Travail demandé<textarea name="workRequested" rows="3" maxlength="1000" placeholder="Ex. vidange, bruit au freinage…"></textarea></label>
-      </div>
-      <div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button><button class="primary-btn" type="submit">Créer le dossier</button></div>
-    </form>
-  </dialog>
+    <div id="app-shell" class="app-shell hidden">
+      <aside class="sidebar">
+        <div class="brand-wrap">
+          <div class="brand-mark">AF</div>
+          <div>
+            <strong>AtelierFlow</strong>
+            <small id="current-user-label">Utilisateur</small>
+          </div>
+        </div>
 
-  <dialog id="quote-dialog">
-    <form id="quote-form" method="dialog">
-      <div class="dialog-head"><h2>Ajouter un devis complémentaire</h2><button class="icon-btn" type="button" data-action="close-dialog" aria-label="Fermer">×</button></div>
-      <input type="hidden" name="vehicleId">
-      <div class="form-grid">
-        <label class="full">Anomalie constatée<textarea name="description" rows="3" required maxlength="1000"></textarea></label>
-        <label>Montant estimé (€)<input name="amount" type="number" min="0" step="0.01" required></label>
-        <label>Décision<select name="decision"><option value="En attente">En attente client</option><option value="Accepté">Accepté</option><option value="Refusé">Refusé</option></select></label>
-      </div>
-      <div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button><button class="primary-btn" type="submit">Enregistrer le devis</button></div>
-    </form>
-  </dialog>
+        <nav class="nav" aria-label="Navigation principale">
+          <button class="nav-item active" data-view="dashboard">Tableau de bord</button>
+          <button class="nav-item" data-view="vehicles">Véhicules</button>
+          <button class="nav-item" data-view="orders">Ordres de travail</button>
+          <button class="nav-item" data-view="quotes">Devis</button>
+          <button class="nav-item" data-view="planning">Planning</button>
+          <button class="nav-item admin-only" data-view="accounts">Comptes</button>
+        </nav>
 
-  <dialog id="edit-dialog">
-    <form id="edit-form" method="dialog">
-      <div class="dialog-head"><h2>Modifier le dossier</h2><button class="icon-btn" type="button" data-action="close-dialog" aria-label="Fermer">×</button></div>
-      <input type="hidden" name="vehicleId">
-      <div class="form-grid">
-        <label>Statut<select name="status"><option>À planifier</option><option>En cours</option><option>En attente client</option><option>Prêt à récupérer</option><option>Clôturé</option></select></label>
-        <label class="full">Travail effectué / notes<textarea name="workDone" rows="3" maxlength="1500"></textarea></label>
-        <label class="full">Pièces remplacées (une par ligne)<textarea name="parts" rows="3" maxlength="1000"></textarea></label>
-        <label class="full">Tâches de l’ordre de travail (une par ligne)<textarea name="tasks" rows="4" maxlength="1500"></textarea></label>
-      </div>
-      <div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button><button class="primary-btn" type="submit">Enregistrer</button></div>
-    </form>
-  </dialog>
+        <button id="logout-btn" class="logout-btn">Déconnexion</button>
+      </aside>
 
-  <script src="app.js"></script>
-</body>
+      <main class="main-panel">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Garage automobile</p>
+            <h1 id="page-title">Tableau de bord</h1>
+          </div>
+          <button class="primary-btn" data-action="new-vehicle">+ Nouveau dossier</button>
+        </header>
+
+        <div id="app-content" aria-live="polite"></div>
+      </main>
+    </div>
+
+    <dialog id="vehicle-dialog">
+      <form id="vehicle-form" method="dialog">
+        <div class="dialog-head">
+          <h2>Nouveau dossier véhicule</h2>
+          <button class="icon-btn" type="button" data-action="close-dialog">×</button>
+        </div>
+
+        <div class="form-grid">
+          <label>Client<input name="clientName" required maxlength="100" /></label>
+          <label>Téléphone<input name="phone" type="tel" required maxlength="30" placeholder="06 …" /></label>
+          <label>Marque<input name="brand" required maxlength="60" /></label>
+          <label>Modèle<input name="model" required maxlength="60" /></label>
+          <label>Immatriculation<input name="plate" required maxlength="20" /></label>
+          <label>Date prévue<input name="plannedDate" type="date" required /></label>
+          <label class="full">Travail demandé<textarea name="workRequested" rows="3" maxlength="1000"></textarea></label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button>
+          <button class="primary-btn" type="submit">Créer le dossier</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="quote-dialog">
+      <form id="quote-form" method="dialog">
+        <div class="dialog-head">
+          <h2>Ajout devis complémentaire</h2>
+          <button class="icon-btn" type="button" data-action="close-dialog">×</button>
+        </div>
+
+        <input type="hidden" name="vehicleId" />
+
+        <div class="form-grid">
+          <label class="full">Anomalie constatée<textarea name="description" rows="3" required maxlength="1000"></textarea></label>
+          <label>Montant estimé (€)<input name="amount" type="number" min="0" step="0.01" required /></label>
+          <label>Décision<select name="decision">
+            <option value="En attente">En attente</option>
+            <option value="Accepté">Accepté</option>
+            <option value="Refusé">Refusé</option>
+          </select></label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button>
+          <button class="primary-btn" type="submit">Enregistrer</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="edit-dialog">
+      <form id="edit-form" method="dialog">
+        <div class="dialog-head">
+          <h2>Modifier le dossier</h2>
+          <button class="icon-btn" type="button" data-action="close-dialog">×</button>
+        </div>
+
+        <input type="hidden" name="vehicleId" />
+
+        <div class="form-grid">
+          <label>Statut<select name="status">
+            <option>À planifier</option>
+            <option>En cours</option>
+            <option>En attente client</option>
+            <option>Prêt à récupérer</option>
+            <option>Clôturé</option>
+          </select></label>
+          <label class="full">Travail effectué<textarea name="workDone" rows="3" maxlength="1500"></textarea></label>
+          <label class="full">Pièces remplacées (une par ligne)<textarea name="parts" rows="3" maxlength="1000"></textarea></label>
+          <label class="full">Tâches de l’ordre de travail (une par ligne)<textarea name="tasks" rows="4" maxlength="1500"></textarea></label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button>
+          <button class="primary-btn" type="submit">Enregistrer</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="planning-dialog">
+      <form id="planning-form" method="dialog">
+        <div class="dialog-head">
+          <h2>Attribuer un mécanicien</h2>
+          <button class="icon-btn" type="button" data-action="close-dialog">×</button>
+        </div>
+
+        <div class="form-grid">
+          <label>Véhicule<select name="vehicleId" id="planning-vehicle-id"></select></label>
+          <label>Mécanicien<select name="mechanicId" id="planning-mechanic-id"></select></label>
+          <label>Date<input name="date" type="date" required /></label>
+          <label>Début<input name="start" type="time" required /></label>
+          <label>Fin<input name="end" type="time" required /></label>
+          <label class="full">Note<textarea name="notes" rows="3" maxlength="500" placeholder="Diagnostic ou intervention prévue"></textarea></label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button>
+          <button class="primary-btn" type="submit">Enregistrer</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="create-account-dialog">
+      <form id="create-account-form" method="dialog">
+        <div class="dialog-head">
+          <h2>Créer un compte mécanicien</h2>
+          <button class="icon-btn" type="button" data-action="close-dialog">×</button>
+        </div>
+
+        <div class="form-grid">
+          <label>Nom complet<input name="name" required /></label>
+          <label>Email<input name="email" type="email" required /></label>
+          <label>Mot de passe<input name="password" type="password" required minlength="6" /></label>
+        </div>
+
+        <div class="dialog-actions">
+          <button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button>
+          <button class="primary-btn" type="submit">Créer</button>
+        </div>
+      </form>
+    </dialog>
+
+    <script src="app.js"></script>
+  </body>
 </html>
