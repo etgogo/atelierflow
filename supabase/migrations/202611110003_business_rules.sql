@@ -170,7 +170,7 @@ RETURNS TRIGGER
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = pg_catalog, public
-AS $
+AS $$
 BEGIN
   INSERT INTO public.audit_logs (
     garage_id,
@@ -197,12 +197,12 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$;
+$$;
 
 CREATE OR REPLACE FUNCTION public.record_audit_triggers()
 RETURNS VOID
 LANGUAGE plpgsql
-AS $
+AS $$
 DECLARE
   v_table TEXT;
 BEGIN
@@ -236,7 +236,7 @@ BEGIN
     );
   END LOOP;
 END;
-$;
+$$;
 
 SELECT public.record_audit_triggers();
 
