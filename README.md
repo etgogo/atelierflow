@@ -1,5 +1,7 @@
 # AtelierFlow — prototype de gestion d’atelier
 
+> **État actuel : prototype local.** Une branche de travail contient une première base SQL Supabase en cours de revue, mais l’application publiée n’est pas encore connectée à cette base.
+
 Application web en français pour suivre les dossiers d’un atelier mécanique : véhicules, clients, planning, ordres de travail, pièces remplacées, anomalies et devis complémentaires.
 
 ## Lancer le prototype
@@ -21,6 +23,10 @@ Puis ouvrez `http://localhost:8000`.
 - Ajout de devis complémentaires, montant et décision enregistrée (en attente, accepté, refusé).
 - Validation « prêt à récupérer » et préparation d’un message SMS.
 - Les données sont stockées dans le `localStorage` du navigateur sur cet appareil.
+
+## État de la préparation Supabase
+
+Les migrations de la branche `feature/supabase-database-foundation` sont des brouillons de développement. Elles doivent encore être exécutées sur une base Supabase vierge, vérifiées avec des comptes de garages distincts et testées avant toute mise en production. L’interface actuelle utilise toujours `localStorage`.
 
 ## Limites importantes du prototype
 
