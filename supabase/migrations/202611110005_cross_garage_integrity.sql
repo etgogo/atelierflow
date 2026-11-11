@@ -24,7 +24,7 @@ BEGIN
   INTO v_parent_garage_id
   USING v_parent_id;
 
-  IF NOT FOUND THEN
+  IF v_parent_garage_id IS NULL THEN
     RAISE EXCEPTION 'Referenced record % does not exist in %.',
       v_parent_id, TG_ARGV[0]
       USING ERRCODE = 'foreign_key_violation';
