@@ -20,7 +20,7 @@ La clé incluse dans `config.js` est une clé publique *publishable* prévue pou
 
 Le projet de développement est configuré dans `config.js`. Pour un autre projet, remplacez l’URL et la clé publique par celles de ce projet. Les migrations SQL numérotées doivent être appliquées dans l’ordre sur une base vierge.
 
-L’inscription peut nécessiter une confirmation par e-mail selon les paramètres Auth du projet. Dans ce cas, l’utilisateur doit confirmer son adresse avant de se connecter et de créer son garage.
+L’inscription peut nécessiter une confirmation par e-mail selon les paramètres Auth du projet. L’application renvoie vers l’URL où elle est ouverte après confirmation. Avant publication, ajoutez l’URL GitHub Pages finale (par exemple `https://etgogo.github.io/atelierflow/`) dans Supabase Authentication → URL Configuration → Site URL et Redirect URLs. Dans ce cas, l’utilisateur doit confirmer son adresse avant de se connecter et de créer son garage.
 
 ## Limites avant production
 
