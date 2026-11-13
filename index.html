@@ -3,75 +3,101 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Prototype de gestion d’atelier mécanique">
+  <meta name="description" content="AtelierFlow — gestion d’atelier mécanique en ligne">
+  <meta name="theme-color" content="#24518a">
   <title>AtelierFlow — Gestion atelier</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    [hidden]{display:none!important}\n    .auth-wrap{max-width:520px;margin:7vh auto;padding:28px;background:#fff;border:1px solid var(--line);border-radius:14px;box-shadow:0 8px 30px #1822300d}
+    .auth-wrap h2{margin-top:0}.auth-wrap label{display:grid;gap:6px;margin:14px 0;font-weight:600}
+    .auth-wrap input{width:100%;padding:12px;border:1px solid var(--line);border-radius:8px}
+    .auth-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.notice{padding:12px;border-radius:8px;background:#eaf0f8;margin:14px 0}
+    .error{background:#fff0ef;color:#9c2820}.success{background:#e8f6ef;color:#17663b}
+    .top-actions{display:flex;gap:10px;align-items:center}.muted{color:var(--muted)}
+    .inline-form{display:flex;gap:10px;flex-wrap:wrap;align-items:end}.inline-form label{display:grid;gap:5px}
+    .inline-form input,.inline-form select,.inline-form textarea{padding:9px;border:1px solid var(--line);border-radius:7px}
+    .data-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.data-form label{display:grid;gap:5px}
+    .data-form input,.data-form textarea,.data-form select{width:100%;padding:10px;border:1px solid var(--line);border-radius:7px}
+    .data-form .full{grid-column:1/-1}.empty{padding:24px;text-align:center;color:var(--muted)}
+    .auth-brand{display:flex;align-items:center;gap:10px;margin-bottom:20px;font-size:22px;font-weight:750}
+    .auth-brand span{background:var(--primary);color:white;padding:9px;border-radius:8px;font-size:13px}
+    .danger-btn{border:1px solid #d7a5a2;background:#fff;color:#9c2820;border-radius:7px;padding:9px 12px}
+    @media(max-width:700px){.auth-wrap{margin:18px 12px;padding:20px}.data-form{grid-template-columns:1fr}.data-form .full{grid-column:auto}.topbar{align-items:flex-start;flex-wrap:wrap}.main-panel{padding:16px}}
+  </style>
 </head>
 <body>
-  <div class="app-shell">
+  <section id="auth-screen" class="auth-wrap">
+    <div class="auth-brand"><span>AF</span> AtelierFlow</div>
+    <h2>Connexion à votre atelier</h2>
+    <p class="muted">Connectez-vous pour retrouver vos dossiers depuis vos appareils.</p>
+    <div id="auth-message" class="notice" hidden></div>
+    <form id="auth-form">
+      <label>Adresse e-mail<input name="email" type="email" autocomplete="email" required></label>
+      <label id="password-field">Mot de passe<input name="password" type="password" autocomplete="current-password" minlength="8" required></label>
+      <label id="remember-field" class="remember-option"><input name="remember_session" type="checkbox" checked> Rester connecté sur cet appareil</label>
+      <label id="name-field" hidden>Nom complet<input name="full_name" autocomplete="name"></label>
+      <div class="auth-actions">
+        <button class="primary-btn" type="submit" id="auth-submit">Se connecter</button>
+        <button class="secondary-btn" type="button" id="toggle-signup">Demander un accès</button>
+      </div>
+    </form>
+    <section id="password-setup-panel" hidden>
+      <h2>Choisir votre mot de passe</h2>
+      <p class="muted">Votre compte mécanicien a été créé par l’administrateur de l’atelier. Choisissez un mot de passe personnel pour activer votre accès.</p>
+      <div id="password-setup-message" class="notice" hidden></div>
+      <form id="password-setup-form">
+        <label>Nouveau mot de passe<input name="password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <label>Confirmer le mot de passe<input name="confirm_password" type="password" autocomplete="new-password" minlength="8" required></label>
+        <div class="auth-actions"><button class="primary-btn" type="submit">Enregistrer mon mot de passe</button></div>
+      </form>
+    </section>
+    <p class="muted" style="font-size:12px;margin-top:18px">Les comptes sont personnels. Les données de chaque garage sont isolées.</p>
+  </section>
+
+  <section id="garage-screen" class="auth-wrap" hidden>
+    <div class="auth-brand"><span>AF</span> AtelierFlow</div>
+    <h2>Configurer votre atelier</h2>
+    <p class="muted">Votre compte est connecté. Renseignez les informations de votre garage pour commencer.</p>
+    <div id="garage-message" class="notice" hidden></div>
+    <form id="garage-form" class="data-form">
+      <label class="full">Nom de l’atelier<input name="name" required maxlength="120"></label>
+      <label>Adresse<input name="address" maxlength="200"></label>
+      <label>Code postal<input name="postal_code" maxlength="20"></label>
+      <label>Ville<input name="city" maxlength="100"></label>
+      <label>Téléphone<input name="phone" type="tel" maxlength="40"></label>
+      <label class="full">E-mail professionnel<input name="email" type="email" maxlength="200"></label>
+      <div class="auth-actions full"><button class="primary-btn" type="submit">Créer mon espace atelier</button><button class="secondary-btn" type="button" id="garage-signout">Déconnexion</button></div>
+    </form>
+  </section>
+
+  <div class="app-shell" id="application" hidden>
     <aside class="sidebar">
-      <a class="brand" href="#dashboard" aria-label="AtelierFlow, accueil"><span class="brand-mark">AF</span><strong>AtelierFlow</strong></a>
+      <a class="brand" href="#dashboard"><span class="brand-mark">AF</span><strong>AtelierFlow</strong></a>
       <nav class="nav" aria-label="Navigation principale">
         <button class="nav-item active" data-view="dashboard">Tableau de bord</button>
         <button class="nav-item" data-view="vehicles">Véhicules</button>
         <button class="nav-item" data-view="orders">Ordres de travail</button>
         <button class="nav-item" data-view="quotes">Devis</button>
-        <button class="nav-item" data-view="planning">Planning</button>
+        <button class="nav-item" data-view="planning">Planning atelier</button>
+        <button class="nav-item" data-view="handoffs">Véhicules à remettre</button>
+        <button class="nav-item" data-view="archives">Archives</button>
+        <button class="nav-item" data-view="team">Équipe & administration</button>
+        <button class="nav-item" data-view="settings">Paramètres</button>
       </nav>
-      <p class="sidebar-note">Prototype local · données enregistrées sur cet appareil</p>
+      <p class="sidebar-note" id="garage-label">Données synchronisées en ligne</p>
     </aside>
     <main class="main-panel">
       <header class="topbar">
         <div><p class="eyebrow">Gestion d’atelier</p><h1 id="page-title">Tableau de bord</h1></div>
-        <button class="primary-btn" data-action="new-vehicle">+ Nouveau dossier</button>
+        <div class="top-actions"><button class="primary-btn" id="new-vehicle">+ Nouveau dossier</button><button class="secondary-btn" id="signout">Déconnexion</button></div>
       </header>
-      <div id="app" aria-live="polite"></div>
+      <div id="app" aria-live="polite"><p class="empty">Chargement des données…</p></div>
     </main>
   </div>
 
-  <dialog id="vehicle-dialog">
-    <form id="vehicle-form" method="dialog">
-      <div class="dialog-head"><h2>Nouveau dossier véhicule</h2><button class="icon-btn" type="button" data-action="close-dialog" aria-label="Fermer">×</button></div>
-      <div class="form-grid">
-        <label>Nom du client<input name="clientName" required maxlength="100"></label>
-        <label>Téléphone<input name="phone" type="tel" required maxlength="30" placeholder="06…"></label>
-        <label>Marque<input name="brand" required maxlength="60"></label>
-        <label>Modèle<input name="model" required maxlength="60"></label>
-        <label>Immatriculation<input name="plate" required maxlength="20"></label>
-        <label>Date prévue<input name="plannedDate" type="date" required></label>
-        <label class="full">Travail demandé<textarea name="workRequested" rows="3" maxlength="1000" placeholder="Ex. vidange, bruit au freinage…"></textarea></label>
-      </div>
-      <div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button><button class="primary-btn" type="submit">Créer le dossier</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="quote-dialog">
-    <form id="quote-form" method="dialog">
-      <div class="dialog-head"><h2>Ajouter un devis complémentaire</h2><button class="icon-btn" type="button" data-action="close-dialog" aria-label="Fermer">×</button></div>
-      <input type="hidden" name="vehicleId">
-      <div class="form-grid">
-        <label class="full">Anomalie constatée<textarea name="description" rows="3" required maxlength="1000"></textarea></label>
-        <label>Montant estimé (€)<input name="amount" type="number" min="0" step="0.01" required></label>
-        <label>Décision<select name="decision"><option value="En attente">En attente client</option><option value="Accepté">Accepté</option><option value="Refusé">Refusé</option></select></label>
-      </div>
-      <div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button><button class="primary-btn" type="submit">Enregistrer le devis</button></div>
-    </form>
-  </dialog>
-
-  <dialog id="edit-dialog">
-    <form id="edit-form" method="dialog">
-      <div class="dialog-head"><h2>Modifier le dossier</h2><button class="icon-btn" type="button" data-action="close-dialog" aria-label="Fermer">×</button></div>
-      <input type="hidden" name="vehicleId">
-      <div class="form-grid">
-        <label>Statut<select name="status"><option>À planifier</option><option>En cours</option><option>En attente client</option><option>Prêt à récupérer</option><option>Clôturé</option></select></label>
-        <label class="full">Travail effectué / notes<textarea name="workDone" rows="3" maxlength="1500"></textarea></label>
-        <label class="full">Pièces remplacées (une par ligne)<textarea name="parts" rows="3" maxlength="1000"></textarea></label>
-        <label class="full">Tâches de l’ordre de travail (une par ligne)<textarea name="tasks" rows="4" maxlength="1500"></textarea></label>
-      </div>
-      <div class="dialog-actions"><button class="secondary-btn" type="button" data-action="close-dialog">Annuler</button><button class="primary-btn" type="submit">Enregistrer</button></div>
-    </form>
-  </dialog>
-
-  <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js?v=cf941872"></script>
 </body>
 </html>
